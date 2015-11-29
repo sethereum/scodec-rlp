@@ -8,10 +8,6 @@ scalaVersion := "2.11.7"
 
 scalacOptions ++= Seq("-deprecation", "-feature")
 
-resolvers ++= Seq(
-  "yzernik repo" at "http://dl.bintray.com/yzernik/maven/"
-)
-
 libraryDependencies ++= Seq(
   "org.scodec"        %% "scodec-core"    % "1.8.3",
 
