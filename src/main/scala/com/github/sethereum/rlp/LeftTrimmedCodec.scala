@@ -1,11 +1,26 @@
 package com.github.sethereum.rlp
 
-import java.lang.{Integer => javaInt, Long => javaLong}
+import java.lang.{Integer => javaInt, Long => javaLong, Short => javaShort}
 
 import com.github.sethereum.rlp
 import scodec.bits.BitVector
 import scodec.codecs._
 import scodec.{Attempt, Codec, DecodeResult, SizeBound}
+
+/**
+ * Trims leading zeros during encoding.
+ *
+ * Must be wrapped with a variable length codec (since the resulting bit vector will be value dependent).
+ */
+private [rlp] object LeftTrimmedShortCodec extends Codec[Short] {
+
+  override def sizeBound: SizeBound = SizeBound.bounded(8, javaShort.SIZE)
+
+  override def encode(value: Short): Attempt[BitVector] =
+    Attempt.successful(BitVector.fromShort(value, leftTrimmedBytesLength(value) * 8))
+
+  override def decode(bits: BitVector): Attempt[DecodeResult[Short]] = ushort(bits.length.toInt).decode(bits)
+}
 
 /**
  * Trims leading zeros during encoding.

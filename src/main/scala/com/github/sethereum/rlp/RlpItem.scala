@@ -40,6 +40,7 @@ private [rlp] object RlpString {
   def apply(n: Boolean): RlpString[Boolean] = RlpString(BitVector(if (n) 1 else 0))
   def apply(n: Byte): RlpString[Byte] = RlpString(BitVector(n))
   def apply(n: Char): RlpString[Char] = RlpString(BitVector(n))
+  def apply(n: Short): RlpString[Short] = RlpString(BitVector.fromShort(n, leftTrimmedBytesLength(n) * 8))
   def apply(n: Int): RlpString[Int] = RlpString(BitVector.fromInt(n, leftTrimmedBytesLength(n) * 8))
   def apply(n: Long): RlpString[Long] = RlpString(BitVector.fromLong(n, rlp.leftTrimmedBytesLength(n) * 8))
 

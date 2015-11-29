@@ -26,6 +26,7 @@ package object rlp {
   implicit val rlpBool = integralRlpCodec[Boolean](s => bool(s.bits.length.toInt), RlpString.apply)
   implicit val rlpByte = integralRlpCodec[Byte](s => byte(s.bits.length.toInt), RlpString.apply)
   implicit val rlpInt = integralRlpCodec[Int](s => LeftTrimmedIntCodec, RlpString.apply)
+  implicit val rlpShort = integralRlpCodec[Short](s => LeftTrimmedShortCodec, RlpString.apply)
   implicit val rlpLong = integralRlpCodec[Long](s => LeftTrimmedLongCodec, RlpString.apply)
 
   implicit def rlpChar(implicit charset: Charset) = RlpCodec(RlpString.codec[Char].narrow[Char](
