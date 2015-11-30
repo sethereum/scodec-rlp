@@ -16,7 +16,7 @@ object PacketType {
 }
 
 
-sealed abstract class Packet {
+sealed abstract class Packet
 object Packet {
 
   case class Header[P <: Packet](hash: String, signature: String, payload: P)
