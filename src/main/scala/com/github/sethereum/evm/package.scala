@@ -16,7 +16,7 @@ package object evm {
   // EVM word conversions
 
   implicit def wordToBigInteger(word: EvmWord) = new BigInteger(word)
-  implicit def bigIntegerToWord(value: BigInteger) = value.toByteArray
+  implicit def bigIntegerToWord(value: BigInteger): EvmWord = value.toByteArray
 
 
 

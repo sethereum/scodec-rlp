@@ -9,6 +9,7 @@ scalaVersion := "2.11.7"
 scalacOptions ++= Seq("-deprecation", "-feature")
 
 libraryDependencies ++= Seq(
+  "org.scala-lang"    % "scala-reflect"  % "2.11.7",
   "org.scodec"        %% "scodec-core"    % "1.8.3",
 
   "org.scalatest"     %% "scalatest"      % "2.2.1" % "test"
