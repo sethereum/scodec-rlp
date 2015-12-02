@@ -4,6 +4,10 @@ import scala.language.implicitConversions
 
 package object evm {
 
+  class EvmException(msg: String) extends Exception(msg) {
+    def this() = this("")
+  }
+
   type EvmWord = Array[Byte]
   object EvmWord {
     val SIZE = 256
