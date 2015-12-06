@@ -4,29 +4,99 @@ import java.math.BigInteger
 
 import shapeless._
 import shapeless.ops.hlist.Tupler
-import shapeless.syntax.std.function._
+//import shapeless.syntax.std.tuple._
+import shapeless.syntax.std.product._
 
-sealed abstract class EvmOperation[In <: HList, Out <: HList](opcode: Int)(fn: (In, EvmState) => (Out, EvmState)) {
+import scala.util.Try
+
+sealed abstract class EvmOperation[In <: HList, Out <: HList](opcode: Int)(implicit pop: EvmStack.Pop[In], push: EvmStack.Push[Out]) {
   type Pop = In
   type Push = Out
 
-  def apply(operands: In, state: EvmState): (Out, EvmState) = fn(operands, state)
+  def apply(from: EvmState): Try[EvmState] = for {
+    (in, sin) <- from.stack.pop[In]
+    (out, sout) <- operation(in, EvmState.stackLens.set(from)(sin))
+    sto <- sout.stack.push(out)
+  } yield EvmState.stackLens.set(sout)(sto)
+
+  def operation(in: In, from: EvmState): Try[(Out, EvmState)]
 }
 
-// Operation that does not modify state
-sealed abstract class EvmStackOperation[In <: HList, Out <: HList](opcode: Int)(fn: (In) => (Out))
-  extends EvmOperation[In, Out](opcode)((in, state) => (fn(in), state)) {}
+sealed abstract class EvmOperation2[In <: HList, Out <: HList, InT, OutT](opcode: Int)(implicit pop: EvmStack.Pop[In], push: EvmStack.Push[Out], tIn: Tupler.Aux[In, InT], tOut: Tupler.Aux[Out, OutT]) {
+  type Pop = In
+  type Push = Out
+
+  def apply(from: EvmState): Try[EvmState] = for {
+    (in, sin) <- from.stack.pop[In]
+    (out, sout) <- operation(in, EvmState.stackLens.set(from)(sin))
+    sto <- sout.stack.push(out)
+  } yield EvmState.stackLens.set(sout)(sto)
+
+  def operation(in: In, from: EvmState): Try[(Out, EvmState)]
+}
+
+// Operation that only accesses the stack
+sealed abstract class EvmStackOperation[In <: HList, Out <: HList](opcode: Int)(op: In => Out)(implicit pop: EvmStack.Pop[In], push: EvmStack.Push[Out])
+  extends EvmOperation[In, Out](opcode)
+{
+  override def operation(in: In, from: EvmState) = Try((op(in), from))
+}
+
+// Operation that only accesses the stack
+//sealed abstract class EvmStackOperation2[In <: HList, Out <: HList, InT, OutT](opcode: Int)(op: InT => OutT)(implicit pop: EvmStack.Pop[In], push: EvmStack.Push[Out], tIn: Tupler.Aux[In, InT], tOut: Tupler.Aux[Out, OutT])
+//  extends EvmOperation[In, Out](opcode)
+//{
+//  override def operation(in: In, from: EvmState) = Try((op(in), from))
+//}
+
+sealed abstract class EvmStorageOperation[In <: HList, Out <: HList](opcode: Int)(op: (In, EvmStorage) => Try[(Out, EvmStorage)])(implicit pop: EvmStack.Pop[In], push: EvmStack.Push[Out])
+  extends EvmOperation[In, Out](opcode)
+{
+  override def operation(in: In, from: EvmState) = for {
+    (out, sout) <- op(in, from.storage)
+  } yield (out, EvmState.storageLens.set(from)(sout))
+}
+
+
+//object EvmStackOperation {
+//  def apply[In <: HList, Out <: HList](opcode: Int)(op: In => Out)(implicit pop: EvmStack.Pop[In], push: EvmStack.Push[Out]): EvmStackOperation[In, Out] =
+//    new EvmStackOperation[In, Out](opcode) {
+//      override protected def operation(state: EvmState): (In) => Out = op
+//    }
+//}
+
+//object EvmStorageOperation {
+//  def apply[In <: HList, Out <: HList](opcode: Int)(op: In => Out)(implicit pop: EvmStack.Pop[In], push: EvmStack.Push[Out]): EvmStackOperation[In, Out] =
+//    new EvmStackOperation[In, Out](opcode) {
+//      override protected def operation(state: EvmState): (In) => Out = op
+//    }
+//}
+
+// Operation that accesses storage
+//sealed abstract class EvmStackOperation[In <: HList, Out <: HList](opcode: Int)(op: In => Out)(implicit pop: EvmStack.Pop[In], push: EvmStack.Push[Out])
+//  extends EvmOperation[In, Out](opcode)
+//{
+//  override def apply(state: EvmState): Try[EvmState] = operate(state)(op)
+//
+//  protected def operate(state: EvmState)(fn: In => Out): Try[EvmState] = for {
+//    (in, sin) <- state.stack.pop[In]
+//    sout <- sin.push(fn(in))
+//  } yield EvmState.stackLens.set(state)(sout)
+//}
 
 
 object EvmOperation {
 
   import BigInteger._
-  import EvmStorage._
+  import EvmStack.Conversions._
 
   // Stack pop/push convenience type definitions
-  private type BigInteger_1 = BigInteger :: HNil
-  private type BigInteger_2 = BigInteger :: BigInteger :: HNil
-  private type BigInteger_3 = BigInteger :: BigInteger :: BigInteger :: HNil
+  type BigInteger_1 = BigInteger :: HNil
+  type BigInteger_2 = BigInteger :: BigInteger :: HNil
+  type BigInteger_3 = BigInteger :: BigInteger :: BigInteger :: HNil
+
+  type BIP_1 = Tuple1[BigInteger]
+  type BIP_2 = (BigInteger, BigInteger)
 
   val MOD256 = ONE.shiftLeft(256)
 
@@ -77,8 +147,8 @@ object EvmOperation {
 //  case object MLOAD         extends OpCode[_1, _1]   (0x51)
 //  case object MSTORE        extends OpCode[_2, _0]   (0x52)
 //  case object MSTORE8       extends OpCode[_2, _0]   (0x53)
-  case object SLOAD         extends EvmOperation[Key :: HNil, Value :: HNil]   (0x54) ({ case (k :: HNil, state) => (HList(state.storage(k)), state) })
-  case object SSTORE        extends EvmOperation[Key :: Value :: HNil, HNil]   (0x55) ({ case (k :: v :: HNil, state) => (HNil, EvmState.storageLens.modify(state)(_ + (k -> v))) })
+//  case object SLOAD         extends EvmOperation[Key :: HNil, Value :: HNil]   (0x54) ({ case (k :: HNil, state) => (HList(state.storage(k)), state) })
+//  case object SSTORE        extends EvmOperation[Key :: Value :: HNil, HNil]   (0x55) ({ case (k :: v :: HNil, state) => (HNil, EvmState.storageLens.modify(state)(_ + (k -> v))) })
 //  case object JUMP          extends OpCode[_1, _0]   (0x56)
 //  case object JUMPI         extends OpCode[_2, _0]   (0x57)
 //  case object PC            extends OpCode[_0, _1]   (0x58)
