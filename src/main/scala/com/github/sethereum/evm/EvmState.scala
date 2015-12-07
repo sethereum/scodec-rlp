@@ -1,6 +1,5 @@
 package com.github.sethereum.evm
 
-import com.github.sethereum.evm.EvmStorage.{Value, Key}
 import shapeless._
 
 import scala.util.Try
@@ -15,19 +14,21 @@ import scala.util.Try
  *
  * State invariants are enforced at construction to ensure only valid states can be created.
  *
- * @param stack
- * @param storage
  */
 case class EvmState(
+    environment: EvmEnvironment = EvmEnvironment(),
+    execution: EvmExecution = EvmExecution(),
     stack: List[EvmWord] = List.empty,
     storage: EvmStorage = EvmStorage.empty
-) extends EvmStackOps[EvmState] with EvmStorageOps[EvmState] {
+) extends EvmExecutionOps[EvmState] with EvmStackOps[EvmState] with EvmStorageOps[EvmState] {
 
   // Check state invariants
   EvmState.validate(this)
 
-  // Stack operations
+  // Execution operations
+  override def stop: Try[EvmState] = execution.stop.map(ex => copy(execution = ex))
 
+  // Stack operations
   override def push[A](a: A)(implicit toW: A => EvmWord) =
     Try(copy(stack = toW(a) +: stack))
 
@@ -36,10 +37,8 @@ case class EvmState(
       .getOrElse(throw new StackUnderflowException))
 
   // Storage operations
-
-  override def sget(k: Key) = Try(storage(k))
-
-  override def sput(k: Key, v: Value): Try[EvmState] = Try(copy(storage = storage + (k -> v)))
+  override def sget(k: EvmStorage.Key) = Try(storage(k))
+  override def sput(k: EvmStorage.Key, v: EvmStorage.Value): Try[EvmState] = Try(copy(storage = storage + (k -> v)))
 }
 
 
@@ -47,8 +46,10 @@ object EvmState {
 
   val MaxStackSize = 1024
 
-  val stackLens   = lens[EvmState] >> 'stack
-  val storageLens = lens[EvmState] >> 'storage
+  val environmentLens   = lens[EvmState] >> 'environment
+  val executionLens     = lens[EvmState] >> 'execution
+  val stackLens         = lens[EvmState] >> 'stack
+  val storageLens       = lens[EvmState] >> 'storage
 
   // Validate state invariants, throwing the appropriate EvmException variant upon violation
   def validate(state: EvmState) = {

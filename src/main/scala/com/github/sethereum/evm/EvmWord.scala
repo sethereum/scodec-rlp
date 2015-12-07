@@ -6,7 +6,7 @@ import scala.language.implicitConversions
 
 final class EvmWord(val bytes: Array[Byte]) {
 
-  require(bytes.length <= EvmWord.SIZE, s"invalid word length ${bytes.length}")
+  require(bytes.length <= EvmWord.BYTES, s"invalid word length ${bytes.length}")
 
   def apply = bytes
 
@@ -21,9 +21,9 @@ final class EvmWord(val bytes: Array[Byte]) {
 object EvmWord {
   val SIZE = 256
   val BYTES = SIZE / 8
-  val ZERO = EvmWord(Array.fill(32)(0.toByte))
+  val ZERO = EvmWord(Array.fill(BYTES)(0.toByte))
 
-  def apply(word: Array[Byte]): EvmWord = new EvmWord(word)
+  def apply(bytes: Array[Byte]): EvmWord = new EvmWord(bytes)
   
   // Implicit conversion to byte array
   implicit def wordToBytes(word: EvmWord): Array[Byte] = word.apply

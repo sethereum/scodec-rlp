@@ -16,6 +16,13 @@ package object evm {
     type Value = EvmWord
 
     val empty = Map.empty[Key, Value].withDefaultValue(EvmWord.ZERO)
+
+    object Key {
+      def apply(bytes: Array[Byte]): EvmStorage.Key = EvmWord(bytes)
+    }
+    object Value {
+      def apply(bytes: Array[Byte]): EvmStorage.Value = EvmWord(bytes)
+    }
   }
 
   /**
@@ -23,9 +30,19 @@ package object evm {
    */
   object EvmWordConversions {
 
+    // Int
+    // TODO: Properly handle signed ints
+    implicit def wordToInt(word: EvmWord) = new BigInteger(word.bytes).intValue()
+    implicit def intToWord(value: Int): EvmWord = EvmWord(BigInteger.valueOf(value).toByteArray)
+
+
     // BigInteger
     implicit def wordToBigInteger(word: EvmWord) = new BigInteger(word.bytes)
     implicit def bigIntegerToWord(value: BigInteger): EvmWord = EvmWord(value.toByteArray)
+
+    // Address
+    implicit def wordToAddress(word: EvmWord) = new EvmAddress(word.bytes)
+    implicit def addressToWord(value: EvmAddress): EvmWord = EvmWord(value.bytes)
 
   }
 

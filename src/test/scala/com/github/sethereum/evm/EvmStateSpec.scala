@@ -3,10 +3,12 @@ package com.github.sethereum.evm
 import java.math.BigInteger
 
 import com.github.sethereum.EvmSpecBase
-import org.scalatest.{Matchers, TryValues, WordSpec}
-import EvmWordConversions._
+import com.github.sethereum.evm.EvmWordConversions._
+import org.scalatest.WordSpec
 
 import scala.util.Try
+
+import scodec.bits._
 
 class EvmStateSpec extends WordSpec with EvmSpecBase {
 
@@ -42,6 +44,22 @@ class EvmStateSpec extends WordSpec with EvmSpecBase {
       actual.pop[BigInteger].success.value shouldBe (ONE, begin)
     }
 
+  }
+
+  "EVM state storage" should {
+
+    "retrieve ZERO for non-existent key" in {
+      EvmState().sget(hex"0011223344".toArray).success.value shouldBe EvmWord.ZERO
+    }
+
+    "store/retrieve" in {
+      val (key, value) = (EvmStorage.Key(hex"00112233".toArray), EvmStorage.Value(hex"5544332211".toArray))
+
+      val after = EvmState().sput(key, value).success.value
+      val actual = after.sget(key).success.value
+
+      actual shouldBe value
+    }
   }
 
 }
