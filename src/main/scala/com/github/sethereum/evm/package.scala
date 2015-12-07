@@ -1,5 +1,7 @@
 package com.github.sethereum
 
+import java.math.BigInteger
+
 import scala.language.implicitConversions
 
 package object evm {
@@ -22,5 +24,17 @@ package object evm {
 
     val empty = Map.empty[Key, Value].withDefaultValue(EvmWord.ZERO)
   }
+
+  /**
+   * Converstions to/from EVM word.
+   */
+  object EvmWordConversions {
+
+    // BigInteger
+    implicit def wordToBigInteger(word: EvmWord) = new BigInteger(word)
+    implicit def bigIntegerToWord(value: BigInteger): EvmWord = value.toByteArray
+
+  }
+
 
 }
