@@ -1,8 +1,8 @@
 package com.github.sethereum.evm
 
+import com.github.sethereum.evm.EvmStorage.{Value, Key}
 import shapeless._
 
-import scala.language.{higherKinds, implicitConversions}
 import scala.util.Try
 
 
@@ -21,21 +21,25 @@ import scala.util.Try
 case class EvmState(
     stack: List[EvmWord] = List.empty,
     storage: EvmStorage = EvmStorage.empty
-) extends EvmStackOps[EvmState] {
+) extends EvmStackOps[EvmState] with EvmStorageOps[EvmState] {
 
   // Check state invariants
   EvmState.validate(this)
 
   // Stack operations
 
-  override def push[A](a: A)(implicit toW: A => Word) =
+  override def push[A](a: A)(implicit toW: A => EvmWord) =
     Try(copy(stack = toW(a) +: stack))
 
-  override def pop[A](implicit fromW: Word => A): Try[(A, EvmState)] =
+  override def pop[A](implicit fromW: EvmWord => A): Try[(A, EvmState)] =
     Try(stack.headOption.map(w => (fromW(w), copy(stack = stack.tail)))
       .getOrElse(throw new StackUnderflowException))
 
   // Storage operations
+
+  override def sget(k: Key) = Try(storage(k))
+
+  override def sput(k: Key, v: Value): Try[EvmState] = Try(copy(storage = storage + (k -> v)))
 }
 
 
@@ -60,9 +64,14 @@ object EvmState {
  * Push/pop operations MUST emit Failure on underflow and overflow conditions.
  */
 trait EvmStackOps[T <: EvmStackOps[T]] { this: T =>
-  type Word = EvmWord
-  def push[A](a: A)(implicit toW: A => Word): Try[T]
-  def pop[A](implicit fromW: Word => A): Try[(A, T)]
+  def push[A](a: A)(implicit toW: A => EvmWord): Try[T]
+  def pop[A](implicit fromW: EvmWord => A): Try[(A, T)]
+}
+
+trait EvmStorageOps[T <: EvmStorageOps[T]] { this: T =>
+  import EvmStorage._
+  def sget(k: Key): Try[Value]
+  def sput(k: Key, v: Value): Try[T]
 }
 
 

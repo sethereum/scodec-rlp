@@ -2,12 +2,13 @@ package com.github.sethereum.evm
 
 import java.math.BigInteger
 
+import com.github.sethereum.EvmSpecBase
 import org.scalatest.{Matchers, TryValues, WordSpec}
 import EvmWordConversions._
 
 import scala.util.Try
 
-class EvmStateSpec extends WordSpec with Matchers with TryValues {
+class EvmStateSpec extends WordSpec with EvmSpecBase {
 
   "EVM state stack" should {
 
@@ -32,13 +33,11 @@ class EvmStateSpec extends WordSpec with Matchers with TryValues {
 
       val value = ONE
       val begin = EvmState()
-      val expected = EvmState(stack = List(ONE.toByteArray))
+      val expected = EvmState(stack = List((ONE.toByteArray: EvmWord)))
 
       val actual = begin.push(ONE).success.value
 
-
-      actual.stack.length shouldBe expected.stack.length
-      actual.stack.zip(expected.stack).foreach { case (a, e) => a should === (e) }
+      actual shouldBe expected
 
       actual.pop[BigInteger].success.value shouldBe (ONE, begin)
     }

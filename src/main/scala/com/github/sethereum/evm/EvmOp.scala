@@ -38,9 +38,8 @@ object EvmOp {
 //  case object SLT           extends OpCode[BigInteger_2, BigInteger_1]   (0x12)
 //  case object SGT           extends OpCode[BigInteger_2, BigInteger_1]   (0x13)
 //  case object EQ            extends OpCode[BigInteger_2, BigInteger_1]   (0x14)
-//  case object ISZERO        extends OpCode[BigInteger_1, BigInteger_1]   (0x15)
 
-
+  case object ISZERO        extends EvmOp   (0x15)  (iszero)
   case object AND           extends EvmOp   (0x16)  (and)
   case object OR            extends EvmOp   (0x17)  (or )
   case object XOR           extends EvmOp   (0x18)  (xor)
@@ -72,8 +71,8 @@ object EvmOp {
 //  case object MLOAD         extends OpCode[_1, _1]   (0x51)
 //  case object MSTORE        extends OpCode[_2, _0]   (0x52)
 //  case object MSTORE8       extends OpCode[_2, _0]   (0x53)
-//  case object SLOAD         extends EvmOperation[Key :: HNil, Value :: HNil]   (0x54) ({ case (k :: HNil, state) => (HList(state.storage(k)), state) })
-//  case object SSTORE        extends EvmOperation[Key :: Value :: HNil, HNil]   (0x55) ({ case (k :: v :: HNil, state) => (HNil, EvmState.storageLens.modify(state)(_ + (k -> v))) })
+  case object SLOAD         extends EvmOp   (0x54) (sload )
+  case object SSTORE        extends EvmOp   (0x55) (sstore)
 //  case object JUMP          extends OpCode[_1, _0]   (0x56)
 //  case object JUMPI         extends OpCode[_2, _0]   (0x57)
 //  case object PC            extends OpCode[_0, _1]   (0x58)
@@ -156,16 +155,20 @@ object EvmOp {
 
     val MOD256 = ONE.shiftLeft(256)
 
-    def add = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.add(y)) }
-    def mul = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.multiply(y)) }
-    def sub = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.subtract(y)) }
-    def div = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(if (y.equals(ZERO)) ZERO else x.divide(y)) }
+    def add    = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.add(y)) }
+    def mul    = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.multiply(y)) }
+    def sub    = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.subtract(y)) }
+    def div    = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(if (y.equals(ZERO)) ZERO else x.divide(y)) }
 
-    def and = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.and(y)) }
-    def or  = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.or(y)) }
-    def xor = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.xor(y)) }
-    def not = (x: BigInteger) =>                    (state: EvmState) => { state.push(x.not()) }
+    def iszero = (x: BigInteger) =>                    (state: EvmState) => { state.push(if (x == ZERO) ONE else ZERO) }
+    def and    = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.and(y)) }
+    def or     = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.or(y)) }
+    def xor    = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.xor(y)) }
+    def not    = (x: BigInteger) =>                    (state: EvmState) => { state.push(x.not()) }
 
+
+    def sload  = (k: EvmStorage.Key) => (state: EvmState) => { state.sget(k).flatMap(v => state.push(v)) }
+    def sstore = (k: EvmStorage.Key) => (v: EvmStorage.Value) => (state: EvmState) => { state.sput(k, v) }
   }
 
 }
