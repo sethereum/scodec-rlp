@@ -18,7 +18,15 @@ case class EvmMemory private (values: Map[EvmWord, EvmWord] = Map.empty.withDefa
   
   override def size: EvmWord = (end: BigInteger).multiply(EvmWordSize)
 
-  override def memLoad(begin: EvmWord): Try[(EvmWord, EvmMemory)] = ???
+  override def memLoad(offset: EvmWord): Try[(EvmWord, EvmMemory)] = {
+    val begin = (begin: BigInteger)
+    val rem = begin.mod(EvmWordSize).intValue()
+    val max = end.max(begin.add(EvmWordSize).add(BigInteger.ONE).divide(EvmWordSize))
+
+    if (offset == 0) {
+      Try((values(begin), ))
+    }
+  }
 
   override def memStore(begin: EvmWord, value: EvmWord): Try[EvmMemory] = ???
 
