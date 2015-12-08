@@ -19,8 +19,14 @@ case class EvmState(
     environment: EvmEnvironment = EvmEnvironment(),
     execution: EvmExecution = EvmExecution(),
     stack: List[EvmWord] = List.empty,
+    memory: EvmMemory = EvmMemory(),
     storage: EvmStorage = EvmStorage.empty
-) extends EvmExecutionOps[EvmState] with EvmStackOps[EvmState] with EvmStorageOps[EvmState] {
+)
+    extends EvmExecutionOps[EvmState]
+    with EvmStackOps[EvmState]
+    with EvmMemoryOps[EvmState]
+    with EvmStorageOps[EvmState]
+{
 
   // Check state invariants
   EvmState.validate(this)
@@ -31,10 +37,18 @@ case class EvmState(
   // Stack operations
   override def push[A](a: A)(implicit toW: A => EvmWord) =
     Try(copy(stack = toW(a) +: stack))
-
   override def pop[A](implicit fromW: EvmWord => A): Try[(A, EvmState)] =
     Try(stack.headOption.map(w => (fromW(w), copy(stack = stack.tail)))
       .getOrElse(throw new StackUnderflowException))
+
+  // Memory operations
+  override def memSize: EvmWord = memory.memSize
+  override def memLoad(offset: EvmWord): Try[(EvmWord, EvmState)] =
+    memory.memLoad(offset).map { case (w, m) => (w, copy(memory = m))}
+  override def memStore(offset: EvmWord, value: EvmWord): Try[EvmState] =
+    memory.memStore(offset, value).map(m => copy(memory = m))
+  override def memStore(offset: EvmWord, value: Byte): Try[EvmState] =
+    memory.memStore(offset, value).map(m => copy(memory = m))
 
   // Storage operations
   override def sget(k: EvmStorage.Key) = Try(storage(k))

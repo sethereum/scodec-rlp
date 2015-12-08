@@ -64,15 +64,15 @@ object EvmOp {
 //  case object DIFFICULTY    extends EvmOp   (0x44)  (0, 1)    (difficulty  )
 //  case object GASLIMIT      extends EvmOp   (0x45)  (0, 1)    (gaslimit    )
   case object POP           extends EvmOp   (0x50)  (1, 0)    (pop         )
-//  case object MLOAD         extends EvmOp   (0x51)  (1, 1)    (mload       )
-//  case object MSTORE        extends EvmOp   (0x52)  (2, 0)    (mstore      )
-//  case object MSTORE8       extends EvmOp   (0x53)  (2, 0)    (mstore8     )
+  case object MLOAD         extends EvmOp   (0x51)  (1, 1)    (mload       )
+  case object MSTORE        extends EvmOp   (0x52)  (2, 0)    (mstore      )
+  case object MSTORE8       extends EvmOp   (0x53)  (2, 0)    (mstore8     )
   case object SLOAD         extends EvmOp   (0x54)  (1, 1)    (sload       )
   case object SSTORE        extends EvmOp   (0x55)  (2, 0)    (sstore      )
 //  case object JUMP          extends EvmOp   (0x56)  (1, 0)    (jump        )
 //  case object JUMPI         extends EvmOp   (0x57)  (2, 0)    (jumpi       )
   case object PC            extends EvmOp   (0x58)  (0, 1)    (pc          )
-//  case object MSIZE         extends EvmOp   (0x59)  (0, 1)    (msize       )
+  case object MSIZE         extends EvmOp   (0x59)  (0, 1)    (msize       )
 //  case object GAS           extends EvmOp   (0x5a)  (0, 1)    (gas         )
 //  case object JUMPDEST      extends EvmOp   (0x5b)  (0, 0)    (jumpdest    )
 //  case object PUSH1         extends EvmOp   (0x60)  (0, 1)    (push1       )
@@ -167,12 +167,17 @@ object EvmOp {
     def origin  = (state: EvmState) => { state.push(state.environment.origin) }
     def caller  = (state: EvmState) => { state.push(state.environment.caller) }
 
-    def pop  = (state: EvmState) => { state.pop.map(_._2) }
+    def pop     = (state: EvmState) => { state.pop.map(_._2) }
 
-    def sload  = (k: EvmStorage.Key) => (state: EvmState) => { state.sget(k).flatMap(v => state.push(v)) }
-    def sstore = (k: EvmStorage.Key) => (v: EvmStorage.Value) => (state: EvmState) => { state.sput(k, v) }
+    def mload   = (o: EvmMemory.Offset) =>                 (state: EvmState) => { state.memLoad(o).flatMap { case (w, s) => s.push(w) } }
+    def mstore  = (o: EvmMemory.Offset) => (w: EvmWord) => (state: EvmState) => { state.memStore(o, w) }
+    def mstore8 = (o: EvmMemory.Offset) => (w: EvmWord) => (state: EvmState) => { state.memStore(o, (w.bytes(0))) }
 
-    def pc  = (state: EvmState) => { state.push(state.execution.programCounter) }
+    def sload   = (k: EvmStorage.Key) => (state: EvmState) => { state.sget(k).flatMap(v => state.push(v)) }
+    def sstore  = (k: EvmStorage.Key) => (v: EvmStorage.Value) => (state: EvmState) => { state.sput(k, v) }
+
+    def pc      = (state: EvmState) => { state.push(state.execution.programCounter) }
+    def msize   = (state: EvmState) => { state.push(state.memSize) }
   }
 
 }

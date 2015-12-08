@@ -25,10 +25,17 @@ final case class EvmWord (val data: Seq[Byte]) {
 object EvmWord {
   val SIZE = 256
   val BYTES = SIZE / 8
-  val ZERO = EvmWord(Array.fill(BYTES)(0.toByte))
+  val ZERO = EvmWord(Seq.fill(BYTES)(0.toByte))
 
-  def apply(array: Array[Byte]): EvmWord = new EvmWord(array: Seq[Byte])
-  
+//  def apply(array: Array[Byte]): EvmWord = new EvmWord(array: Seq[Byte])
+
+  def leftAlign(bytes: Seq[Byte]): EvmWord = {
+    require(bytes.length <= BYTES, s"invalid bytes length ${bytes.length}")
+    val padded = Array.ofDim[Byte](BYTES)
+    bytes.copyToArray(padded)
+    EvmWord(padded)
+  }
+
   // Implicit conversion to byte array
   implicit def wordToBytes(word: EvmWord): Array[Byte] = word.data.toArray[Byte]
   implicit def bytesToWord(array: Array[Byte]): EvmWord = EvmWord(array)
