@@ -1,21 +1,13 @@
 package com.github.sethereum.evm
 
-import java.util
-
 import scala.language.implicitConversions
 
-final class EvmAddress(val bytes: Array[Byte]) {
+final class EvmAddress(val data: Seq[Byte]) {
+  require(data.length == EvmAddress.BYTES, s"invalid address length ${data.length}")
 
-  require(bytes.length <= EvmWord.BYTES, s"invalid address length ${bytes.length}")
+  def this(array: Array[Byte]) = this(array: Seq[Byte])
 
-  def apply = bytes
-
-  override def equals(other: Any): Boolean = other match {
-    case that: EvmWord => util.Arrays.equals(bytes, that.bytes)
-    case _ => false
-  }
-
-  override def hashCode(): Int = util.Arrays.hashCode(bytes)
+  def bytes: Array[Byte] = data.toArray[Byte]
 }
 
 object EvmAddress {
@@ -26,6 +18,6 @@ object EvmAddress {
   def apply(bytes: Array[Byte]): EvmAddress = new EvmAddress(bytes)
 
   // Implicit conversion to byte array
-  implicit def addressToBytes(address: EvmAddress): Array[Byte] = address.apply
-  implicit def bytesToAddress(bytes: Array[Byte]): EvmAddress = EvmAddress(bytes)
+  implicit def addressToBytes(address: EvmAddress): Array[Byte] = address.data.toArray[Byte]
+  implicit def bytesToAddress(array: Array[Byte]): EvmAddress = EvmAddress(array)
 }

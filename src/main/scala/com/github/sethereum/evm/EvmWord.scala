@@ -1,21 +1,25 @@
 package com.github.sethereum.evm
 
-import java.util
-
 import scala.language.implicitConversions
 
-final class EvmWord(val bytes: Array[Byte]) {
+trait EvmWord2 {
+  val data: Seq[Byte]
+  def bytes: Array[Byte]
+}
 
-  require(bytes.length <= EvmWord.BYTES, s"invalid word length ${bytes.length}")
 
-  def apply = bytes
+final case class EvmWord (val data: Seq[Byte]) {
+  require(data.length <= EvmWord.BYTES, s"invalid word length ${data.length}")
 
-  override def equals(other: Any): Boolean = other match {
-    case that: EvmWord => util.Arrays.equals(bytes, that.bytes)
-    case _ => false
-  }
+  def bytes: Array[Byte] = data.toArray[Byte]
 
-  override def hashCode(): Int = util.Arrays.hashCode(bytes)
+  def padLeft: EvmWord =
+    if (data.length == EvmWord.BYTES) this
+    else {
+      val padded = Array.ofDim[Byte](EvmWord.BYTES)
+      data.toArray[Byte].copyToArray(padded, EvmWord.BYTES - data.length)
+      EvmWord(padded)
+    }
 }
 
 object EvmWord {
@@ -23,9 +27,9 @@ object EvmWord {
   val BYTES = SIZE / 8
   val ZERO = EvmWord(Array.fill(BYTES)(0.toByte))
 
-  def apply(bytes: Array[Byte]): EvmWord = new EvmWord(bytes)
+  def apply(array: Array[Byte]): EvmWord = new EvmWord(array: Seq[Byte])
   
   // Implicit conversion to byte array
-  implicit def wordToBytes(word: EvmWord): Array[Byte] = word.apply
-  implicit def bytesToWord(bytes: Array[Byte]): EvmWord = EvmWord(bytes)
+  implicit def wordToBytes(word: EvmWord): Array[Byte] = word.data.toArray[Byte]
+  implicit def bytesToWord(array: Array[Byte]): EvmWord = EvmWord(array)
 }

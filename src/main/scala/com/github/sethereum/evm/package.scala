@@ -42,7 +42,7 @@ package object evm {
 
     // Address
     implicit def wordToAddress(word: EvmWord) = new EvmAddress(word.bytes)
-    implicit def addressToWord(value: EvmAddress): EvmWord = EvmWord(value.bytes)
+    implicit def addressToWord(value: EvmAddress): EvmWord = EvmWord(value.data)
 
   }
 

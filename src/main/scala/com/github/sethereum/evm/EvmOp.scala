@@ -36,7 +36,7 @@ object EvmOp {
 //  case object GT            extends EvmOp   (0x11)  (2, 1)    (gt          )
 //  case object SLT           extends EvmOp   (0x12)  (2, 1)    (slt         )
 //  case object SGT           extends EvmOp   (0x13)  (2, 1)    (sgt         )
-  case object EQ            extends EvmOp   (0x14)  (2, 1)    (eq          )
+//  case object EQ            extends EvmOp   (0x14)  (2, 1)    (eq          )
   case object ISZERO        extends EvmOp   (0x15)  (1, 1)    (iszero      )
   case object AND           extends EvmOp   (0x16)  (2, 1)    (and         )
   case object OR            extends EvmOp   (0x17)  (2, 1)    (or          )
