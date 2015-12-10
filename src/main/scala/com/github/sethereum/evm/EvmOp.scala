@@ -5,6 +5,8 @@ import java.math.BigInteger
 import com.github.sethereum.evm.EvmStateTransition._
 import com.github.sethereum.evm.EvmWordConversions._
 
+import scala.util.Try
+
 
 /**
  * EVM operation represented as a state transition function.
@@ -12,8 +14,20 @@ import com.github.sethereum.evm.EvmWordConversions._
  * @param opcode
  * @param transition
  */
-sealed abstract class EvmOp(opcode: Int)(pop: Int, push: Int)(transition: StateTransitionFunction) {
+sealed abstract class EvmOp(val opcode: Int)(val pop: Int, push: Int)(val transition: StateTransitionFunction) {
   def apply(state: EvmState) = transition(state)
+}
+
+sealed abstract class EvmPushOp(val size: Int)(opcode: Int)(pop: Int, push: Int)(transition: StateTransitionFunction)
+  extends EvmOp(opcode)(pop, push)(transition)
+{
+  override def apply(state: EvmState): Try[EvmState] = super.apply(state)
+}
+
+object EvmPushOp {
+  def transition(size: Int)(state: EvmState) = {
+
+  }
 }
 
 
@@ -176,8 +190,9 @@ object EvmOp {
     def sload   = (k: EvmStorage.Key) => (state: EvmState) => { state.sget(k).flatMap(v => state.push(v)) }
     def sstore  = (k: EvmStorage.Key) => (v: EvmStorage.Value) => (state: EvmState) => { state.sput(k, v) }
 
-    def pc      = (state: EvmState) => { state.push(state.execution.programCounter) }
+    def pc      = (state: EvmState) => { state.push(state.execution.pc) }
     def msize   = (state: EvmState) => { state.push(state.memSize) }
+    def push(bytes: Int) = (state: EvmState) => { }
   }
 
 }

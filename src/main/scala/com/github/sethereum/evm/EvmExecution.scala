@@ -6,14 +6,14 @@ import scala.util.Try
 
 case class EvmExecution(
     running: Boolean = true,
-    programCounter: Int = 0,
-    code: List[EvmOp] = List(EvmOp.STOP))
+    pc: Int = 0,
+    code: Seq[Byte] = Seq(EvmOp.STOP.opcode.toByte))
   extends EvmExecutionOps[EvmExecution]
 {
 
   // TODO: Validate program counter
 
-  def currentOp: EvmOp = code(programCounter)
+//  def currentOp: EvmOp = code(pc)
 
   override def stop: Try[EvmExecution] = Try(copy(running = false))
 }
