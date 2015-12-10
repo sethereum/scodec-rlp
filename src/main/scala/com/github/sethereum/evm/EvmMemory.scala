@@ -40,7 +40,7 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, end: Int = 0) extend
     val begin = offset: Int
     val end = begin + EvmWord.BYTES
     val bytes: Array[Byte] = {
-      if (end > this.end) {
+      if (end > bytes.size) {
         val bytes = Array.ofDim[Byte](end)
         this.bytes.copyToArray(bytes)
         bytes
@@ -57,7 +57,7 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, end: Int = 0) extend
     val begin = offset: Int
     val end = begin + 1
     val bytes: Array[Byte] = {
-      if (end > this.end) {
+      if (end > bytes.size) {
         val bytes = Array.ofDim[Byte](end)
         this.bytes.copyToArray(bytes)
         bytes
