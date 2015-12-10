@@ -39,7 +39,7 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, end: Int = 0) extend
   override def memStore(offset: EvmWord, value: EvmWord): Try[EvmMemory] = {
     val begin = offset: Int
     val end = begin + EvmWord.BYTES
-    val bytes: Array[Byte] = {
+    val to: Array[Byte] = {
       if (end > bytes.size) {
         val bytes = Array.ofDim[Byte](end)
         this.bytes.copyToArray(bytes)
@@ -49,14 +49,14 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, end: Int = 0) extend
       }
     }
 
-    value.bytes.copyToArray(bytes, begin)
-    Try(EvmMemory(bytes, Math.max(this.end, end)))
+    value.bytes.copyToArray(to, begin)
+    Try(EvmMemory(to, Math.max(this.end, end)))
   }
 
   override def memStore(offset: EvmWord, value: Byte): Try[EvmMemory] = {
     val begin = offset: Int
     val end = begin + 1
-    val bytes: Array[Byte] = {
+    val to: Array[Byte] = {
       if (end > bytes.size) {
         val bytes = Array.ofDim[Byte](end)
         this.bytes.copyToArray(bytes)
@@ -66,8 +66,8 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, end: Int = 0) extend
       }
     }
 
-    bytes(begin) = value
-    Try(EvmMemory(bytes, Math.max(this.end, end)))
+    to(begin) = value
+    Try(EvmMemory(to, Math.max(this.end, end)))
   }
 }
 
