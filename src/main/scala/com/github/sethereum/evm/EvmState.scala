@@ -63,6 +63,7 @@ object EvmState {
   val MaxStackSize = 1024
 
   val environmentLens   = lens[EvmState] >> 'environment
+  val callLens          = lens[EvmState] >> 'environment >> 'call
   val executionLens     = lens[EvmState] >> 'execution
   val stackLens         = lens[EvmState] >> 'stack
   val storageLens       = lens[EvmState] >> 'storage

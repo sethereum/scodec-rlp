@@ -64,8 +64,8 @@ object EvmOp {
 //    case 0x31 => Some(BALANCE     )
     case 0x32 => Some(ORIGIN      )
     case 0x33 => Some(CALLER      )
-//    case 0x34 => Some(CALLVALUE   )
-//    case 0x35 => Some(CALLDATALOAD)
+    case 0x34 => Some(CALLVALUE   )
+    case 0x35 => Some(CALLDATALOAD)
 //    case 0x36 => Some(CALLDATASIZE)
 //    case 0x37 => Some(CALLDATACOPY)
 //    case 0x38 => Some(CODESIZE    )
@@ -193,8 +193,8 @@ object EvmOp {
 //  case object BALANCE       extends EvmOp   (0x31)  (1, 1)    (balance     )
   case object ORIGIN        extends EvmOp   (0x32)  (0, 1)    (origin      )
   case object CALLER        extends EvmOp   (0x33)  (0, 1)    (caller      )
-//  case object CALLVALUE     extends EvmOp   (0x34)  (0, 1)    (callvalue   )
-//  case object CALLDATALOAD  extends EvmOp   (0x35)  (1, 1)    (calldataload)
+  case object CALLVALUE     extends EvmOp   (0x34)  (0, 1)    (callvalue   )
+  case object CALLDATALOAD  extends EvmOp   (0x35)  (1, 1)    (calldataload)
 //  case object CALLDATASIZE  extends EvmOp   (0x36)  (0, 1)    (calldatasize)
 //  case object CALLDATACOPY  extends EvmOp   (0x37)  (3, 0)    (calldatacopy)
 //  case object CODESIZE      extends EvmOp   (0x38)  (0, 1)    (codesize    )
@@ -293,6 +293,7 @@ object EvmOp {
 
   object Function {
     import BigInteger._
+    import EvmState._
 
     val MOD256 = ONE.shiftLeft(256)
 
@@ -313,7 +314,14 @@ object EvmOp {
 
     def address = (state: EvmState) => { state.push(state.environment.address) }
     def origin  = (state: EvmState) => { state.push(state.environment.origin) }
-    def caller  = (state: EvmState) => { state.push(state.environment.caller) }
+    def caller  = (state: EvmState) => { state.push(state.environment.call.caller) }
+    def callvalue  = (state: EvmState) => { state.push(state.environment.call.callValue) }
+    def calldataload  = (o: EvmMemory.Offset) => (state: EvmState) => {
+      state.push(state.environment.call.callData.slice(o, EvmWord.BYTES) match {
+        case Nil => EvmWord.ZERO
+        case b => EvmWord(b.padTo(EvmWord.BYTES, 0.toByte))
+      })
+    }
 
     def pop     = (state: EvmState) => { state.pop.map(_._2) }
 
@@ -328,8 +336,8 @@ object EvmOp {
     def msize   = (state: EvmState) => { state.push(state.memSize) }
     def push(bytes: Int) = (state: EvmState) => { state.push(EvmWord(state.execution.code.slice(state.execution.pc + 1, state.execution.pc + bytes + 1))) }
     def dup(i: Int) = (state: EvmState) => { state.push(state.stack(i - 1)) }
-    def swap1 = (state: EvmState) => { Try(EvmState.stackLens.set(state)(state.stack(1) +: state.stack(0) +: state.stack.tail.drop(1))) }
-    def swap(i: Int) = (state: EvmState) => { Try(EvmState.stackLens.set(state)((state.stack(i) +: state.stack.tail.take(i-1)) ++ (state.stack.head +: state.stack.drop(i+1)))) }
+    def swap1 = (state: EvmState) => { Try(stackLens.set(state)(state.stack(1) +: state.stack(0) +: state.stack.tail.drop(1))) }
+    def swap(i: Int) = (state: EvmState) => { Try(stackLens.set(state)((state.stack(i) +: state.stack.tail.take(i-1)) ++ (state.stack.head +: state.stack.drop(i+1)))) }
   }
 
   def keccakDigest(bytes: Seq[Byte]): Seq[Byte] = {
