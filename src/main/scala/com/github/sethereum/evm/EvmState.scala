@@ -45,6 +45,8 @@ case class EvmState(
   override def memSize: EvmWord = memory.memSize
   override def memLoad(offset: EvmWord): Try[(EvmWord, EvmState)] =
     memory.memLoad(offset).map { case (w, m) => (w, copy(memory = m))}
+  override def memSlice(begin: EvmWord, end: EvmWord): Try[(Seq[Byte], EvmState)] =
+    memory.memSlice(begin, end).map { case (d, m) => (d, copy(memory = m))}
   override def memStore(offset: EvmWord, value: EvmWord): Try[EvmState] =
     memory.memStore(offset, value).map(m => copy(memory = m))
   override def memStore(offset: EvmWord, value: Byte): Try[EvmState] =

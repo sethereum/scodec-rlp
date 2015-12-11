@@ -7,6 +7,7 @@ import scala.util.Try
 trait EvmMemoryOps[T <: EvmMemoryOps[T]] { this: T =>
   def memSize: EvmWord
   def memLoad(offset: EvmWord): Try[(EvmWord, T)]
+  def memSlice(begin: EvmWord, end: EvmWord): Try[(Seq[Byte], T)]
   def memStore(offset: EvmWord, value: EvmWord): Try[T]
   def memStore(offset: EvmWord, value: Byte): Try[T]
 }
@@ -18,21 +19,36 @@ trait EvmMemoryOps[T <: EvmMemoryOps[T]] { this: T =>
  * 1. Does NOT satisfy immutable state semantics given the underlying array
  * 2. It is not optimized for sparse memory access
  * 3. Addressable memory is limited to the size of an Int
+ *
+ * TODO: Implement allocation granularity (to avoid numerous small array expansions)
  */
-case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, end: Int = 0) extends EvmMemoryOps[EvmMemory] {
+case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, max: Int = 0) extends EvmMemoryOps[EvmMemory] {
 
-  override def memSize: EvmWord = (end + EvmWord.BYTES - 1) / EvmWord.BYTES * EvmWord.BYTES
+  override def memSize: EvmWord = (max + EvmWord.BYTES - 1) / EvmWord.BYTES * EvmWord.BYTES
 
   override def memLoad(offset: EvmWord): Try[(EvmWord, EvmMemory)] = {
     val begin = offset: Int
     val end = begin + EvmWord.BYTES
 
     if (begin >= bytes.size) {
-      Try((EvmWord.ZERO, copy(end = Math.max(this.end, end))))
+      Try((EvmWord.ZERO, copy(max = Math.max(this.max, end))))
     } else if (end <= bytes.size) {
       Try((EvmWord(bytes.slice(begin, end)), this))
     } else {
-      Try((EvmWord.leftAlign(bytes.slice(begin, bytes.size)), copy(end = end)))
+      Try((EvmWord.leftAlign(bytes.slice(begin, bytes.size)), copy(max = end)))
+    }
+  }
+
+  override def memSlice(begin: EvmWord, end: EvmWord): Try[(Seq[Byte], EvmMemory)] = {
+    val b = begin: Int
+    val e = end: Int
+
+    if (b >= bytes.size) {
+      Try((Seq.fill(e - b)(0.toByte), copy(max = e)))
+    } else if (e <= bytes.size) {
+      Try((bytes.slice(b, e), this))
+    } else {
+      Try((bytes.slice(b, e).padTo(e - b, 0.toByte), copy(max = e)))
     }
   }
 
@@ -50,7 +66,7 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, end: Int = 0) extend
     }
 
     value.bytes.copyToArray(to, begin)
-    Try(EvmMemory(to, Math.max(this.end, end)))
+    Try(EvmMemory(to, Math.max(this.max, end)))
   }
 
   override def memStore(offset: EvmWord, value: Byte): Try[EvmMemory] = {
@@ -67,7 +83,7 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, end: Int = 0) extend
     }
 
     to(begin) = value
-    Try(EvmMemory(to, Math.max(this.end, end)))
+    Try(EvmMemory(to, Math.max(this.max, end)))
   }
 }
 
