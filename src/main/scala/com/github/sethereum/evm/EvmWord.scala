@@ -27,7 +27,7 @@ object EvmWord {
   val BYTES = SIZE / 8
   val ZERO = EvmWord(Seq.fill(BYTES)(0.toByte))
 
-//  def apply(array: Array[Byte]): EvmWord = new EvmWord(array: Seq[Byte])
+  def apply(byte: Byte): EvmWord = new EvmWord(Seq(byte))
 
   def leftAlign(bytes: Seq[Byte]): EvmWord = {
     require(bytes.length <= BYTES, s"invalid bytes length ${bytes.length}")

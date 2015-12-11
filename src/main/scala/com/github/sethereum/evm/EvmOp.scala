@@ -58,8 +58,8 @@ object EvmOp {
     case 0x17 => Some(OR          )
     case 0x18 => Some(XOR         )
     case 0x19 => Some(NOT         )
-//    case 0x1a => Some(BYTE        )
-//    case 0x20 => Some(SHA3        )
+    case 0x1a => Some(BYTE        )
+    case 0x20 => Some(SHA3        )
     case 0x30 => Some(ADDRESS     )
 //    case 0x31 => Some(BALANCE     )
     case 0x32 => Some(ORIGIN      )
@@ -187,8 +187,8 @@ object EvmOp {
   case object OR            extends EvmOp   (0x17)  (2, 1)    (or          )
   case object XOR           extends EvmOp   (0x18)  (2, 1)    (xor         )
   case object NOT           extends EvmOp   (0x19)  (1, 1)    (not         )
-//  case object BYTE          extends EvmOp   (0x1a)  (2, 1)    (byte        )
-//  case object SHA3          extends EvmOp   (0x20)  (2, 1)    (sha3        )
+  case object BYTE          extends EvmOp   (0x1a)  (2, 1)    (byte        )
+  case object SHA3          extends EvmOp   (0x20)  (2, 1)    (sha3        )
   case object ADDRESS       extends EvmOp   (0x30)  (0, 1)    (address     )
 //  case object BALANCE       extends EvmOp   (0x31)  (1, 1)    (balance     )
   case object ORIGIN        extends EvmOp   (0x32)  (0, 1)    (origin      )
@@ -307,6 +307,7 @@ object EvmOp {
     def or     = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.or(y)) }
     def xor    = (x: BigInteger) => (y: BigInteger) => (state: EvmState) => { state.push(x.xor(y)) }
     def not    = (x: BigInteger) =>                    (state: EvmState) => { state.push(x.not()) }
+    def byte   = (i: Int)        => (w: EvmWord)    => (state: EvmState) => { state.push(if (i < EvmWord.BYTES) EvmWord(w.padLeft.bytes(i)) else EvmWord.ZERO) }
 
     def sha3   = (begin: EvmMemory.Offset) => (end: EvmMemory.Offset) => (state: EvmState) => { state.memSlice(begin, end).flatMap { case (m, s) => s.push(EvmWord(keccakDigest(m))) } }
 

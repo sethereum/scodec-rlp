@@ -25,6 +25,8 @@ package object evm {
     }
   }
 
+  type EvmValue = BigInteger
+
   /**
    * Converstions to/from EVM word.
    */
