@@ -1,9 +1,7 @@
 package com.github.sethereum.evm
 
-import java.math.BigInteger
-
 import com.github.sethereum.EvmSpecBase
-import com.github.sethereum.evm.EvmWordConversions._
+import com.github.sethereum.evm.EvmWord.ImplicitConversions._
 import org.scalatest.WordSpec
 
 import scala.util.Try
@@ -11,6 +9,9 @@ import scala.util.Try
 import scodec.bits._
 
 class EvmStateSpec extends WordSpec with EvmSpecBase {
+
+  val ZERO = BigInt(0)
+  val ONE = BigInt(1)
 
   "EVM state stack" should {
 
@@ -20,19 +21,17 @@ class EvmStateSpec extends WordSpec with EvmSpecBase {
 
     "not allow overflow on push" in {
       val result = (0 to EvmState.MaxStackSize).foldLeft(Try(EvmState())) { (s, n) =>
-        s.flatMap(_.push(BigInteger.valueOf(n)))
+        s.flatMap(_.push(BigInt(n)))
       }
       result.failure.exception shouldBe a [StackOverflowException]
     }
 
     "not allow overflow on creation" in {
-      Try(EvmState(stack = List.fill(EvmState.MaxStackSize + 1)(BigInteger.ZERO)))
+      Try(EvmState(stack = List.fill(EvmState.MaxStackSize + 1)(ZERO)))
         .failure.exception shouldBe a [StackOverflowException]
     }
 
     "push/pop BigInteger" in {
-      import BigInteger._
-
       val value = ONE
       val begin = EvmState()
       val expected = EvmState(stack = List((ONE.toByteArray: EvmWord)))
@@ -41,7 +40,7 @@ class EvmStateSpec extends WordSpec with EvmSpecBase {
 
       actual shouldBe expected
 
-      actual.pop[BigInteger].success.value shouldBe (ONE, begin)
+      actual.pop[BigInt].success.value shouldBe (ONE, begin)
     }
 
   }

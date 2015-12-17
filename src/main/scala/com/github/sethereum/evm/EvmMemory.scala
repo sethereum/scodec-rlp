@@ -1,15 +1,16 @@
 package com.github.sethereum.evm
 
-import com.github.sethereum.evm.EvmWordConversions._
+import com.github.sethereum.evm.EvmWord.ImplicitConversions._
 
 import scala.util.Try
 
 trait EvmMemoryOps[T <: EvmMemoryOps[T]] { this: T =>
   def memSize: EvmWord
-  def memLoad(offset: EvmWord): Try[(EvmWord, T)]
-  def memSlice(begin: EvmWord, end: EvmWord): Try[(Seq[Byte], T)]
-  def memStore(offset: EvmWord, value: EvmWord): Try[T]
-  def memStore(offset: EvmWord, value: Byte): Try[T]
+  def memLoad(offset: Int): Try[(EvmWord, T)]
+  def memSlice(begin: Int, end: Int): Try[(Seq[Byte], T)]
+  def memStore(offset: Int, value: EvmWord): Try[T]
+  def memStore(offset: Int, value: Byte): Try[T]
+  def memStore(offset: Int, value: Seq[Byte]): Try[T]
 }
 
 /**
@@ -19,14 +20,15 @@ trait EvmMemoryOps[T <: EvmMemoryOps[T]] { this: T =>
  * 1. Does NOT satisfy immutable state semantics given the underlying array
  * 2. It is not optimized for sparse memory access
  * 3. Addressable memory is limited to the size of an Int
- *
- * TODO: Implement allocation granularity (to avoid numerous small array expansions)
  */
 case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, max: Int = 0) extends EvmMemoryOps[EvmMemory] {
 
-  override def memSize: EvmWord = (max + EvmWord.BYTES - 1) / EvmWord.BYTES * EvmWord.BYTES
+  // Round size up to 32 byte boundary
+  def memSize(size: Int): Int = (size + EvmWord.BYTES - 1) / EvmWord.BYTES * EvmWord.BYTES
 
-  override def memLoad(offset: EvmWord): Try[(EvmWord, EvmMemory)] = {
+  override def memSize: EvmWord = memSize(max)
+
+  override def memLoad(offset: Int): Try[(EvmWord, EvmMemory)] = {
     val begin = offset: Int
     val end = begin + EvmWord.BYTES
 
@@ -39,61 +41,57 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, max: Int = 0) extend
     }
   }
 
-  override def memSlice(begin: EvmWord, end: EvmWord): Try[(Seq[Byte], EvmMemory)] = {
-    val b = begin: Int
-    val e = end: Int
-
-    if (b >= bytes.size) {
-      Try((Seq.fill(e - b)(0.toByte), copy(max = e)))
-    } else if (e <= bytes.size) {
-      Try((bytes.slice(b, e), this))
+  override def memSlice(begin: Int, end: Int): Try[(Seq[Byte], EvmMemory)] = {
+    if (begin >= bytes.size) {
+      Try((Seq.fill(end - begin)(0.toByte), copy(max = end)))
+    } else if (end <= bytes.size) {
+      Try((bytes.slice(begin, end), this))
     } else {
-      Try((bytes.slice(b, e).padTo(e - b, 0.toByte), copy(max = e)))
+      Try((bytes.slice(begin, end).padTo(end - begin, 0.toByte), copy(max = end)))
     }
   }
 
-  override def memStore(offset: EvmWord, value: EvmWord): Try[EvmMemory] = {
-    val begin = offset: Int
-    val end = begin + EvmWord.BYTES
-    val to: Array[Byte] = {
-      if (end > bytes.size) {
-        val bytes = Array.ofDim[Byte](end)
-        this.bytes.copyToArray(bytes)
-        bytes
-      } else {
-        this.bytes.toArray
-      }
-    }
+  override def memStore(offset: Int, value: EvmWord): Try[EvmMemory] = {
+    val end = offset + EvmWord.BYTES
+    val to: Array[Byte] = atLeastMem(end)
 
-    value.bytes.copyToArray(to, begin)
+    value.padLeft.bytes.copyToArray(to, offset)
     Try(EvmMemory(to, Math.max(this.max, end)))
   }
 
-  override def memStore(offset: EvmWord, value: Byte): Try[EvmMemory] = {
-    val begin = offset: Int
-    val end = begin + 1
-    val to: Array[Byte] = {
-      if (end > bytes.size) {
-        val bytes = Array.ofDim[Byte](end)
-        this.bytes.copyToArray(bytes)
-        bytes
-      } else {
-        this.bytes.toArray
-      }
-    }
+  override def memStore(offset: Int, value: Byte): Try[EvmMemory] = {
+    val end = offset + 1
+    val to: Array[Byte] = atLeastMem(end)
 
-    to(begin) = value
+    to(offset) = value
     Try(EvmMemory(to, Math.max(this.max, end)))
+  }
+
+  override def memStore(offset: Int, value: Seq[Byte]): Try[EvmMemory] = {
+    val end = offset + value.size
+    val to: Array[Byte] = atLeastMem(end)
+
+    value.copyToArray(to, offset)
+    Try(EvmMemory(to, Math.max(this.max, end)))
+  }
+
+  // Ensure that internal memory array is at least the given size
+  // Allocation size, if needed, is rounded up to 32 byte boundary
+  private def atLeastMem(size: Int): Array[Byte] = {
+    if (size > bytes.size) {
+      val bytes = Array.ofDim[Byte](memSize(size))
+      this.bytes.copyToArray(bytes)
+      bytes
+    } else {
+      this.bytes.toArray
+    }
   }
 }
 
 object EvmMemory {
-  type Offset = EvmWord
-
   def apply(): EvmMemory = new EvmMemory()
 
   def apply(bytes: Seq[Byte]): EvmMemory = new EvmMemory(bytes, bytes.size)
-
 }
 
 //// Sparse Map-based memory implementation

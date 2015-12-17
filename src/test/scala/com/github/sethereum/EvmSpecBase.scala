@@ -1,14 +1,12 @@
 package com.github.sethereum
 
-import java.math.BigInteger
-
-import com.github.sethereum.evm.{EvmWordConversions, EvmState}
+import com.github.sethereum.evm.{EvmState, EvmWord}
 import org.scalatest.{TryValues, Matchers}
-import EvmWordConversions._
+import EvmWord.ImplicitConversions._
 
 trait EvmSpecBase extends Matchers with TryValues{
 
-  def makeState(xs: BigInteger*): EvmState =
+  def makeState(xs: BigInt*): EvmState =
     xs.foldLeft(EvmState()) { (s, x) => s.push(x).success.value }
 
 }
