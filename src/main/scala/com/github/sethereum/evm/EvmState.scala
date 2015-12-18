@@ -32,7 +32,7 @@ case class EvmState(
   EvmState.validate(this)
 
   // Execution operations
-  override def stop: Try[EvmState] = execution.stop.map(ex => copy(execution = ex))
+  override def jump(pc: Int): Try[EvmState] = execution.jump(pc).map(ex => copy(execution = ex))
 
   // Stack operations
   override def push[A](a: A)(implicit toW: A => EvmWord) =

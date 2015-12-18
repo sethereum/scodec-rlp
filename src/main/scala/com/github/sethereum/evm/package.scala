@@ -1,7 +1,5 @@
 package com.github.sethereum
 
-import scala.language.implicitConversions
-
 package object evm {
 
   class EvmException(msg: String) extends Exception(msg) {

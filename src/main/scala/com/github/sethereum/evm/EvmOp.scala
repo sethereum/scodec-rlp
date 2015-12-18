@@ -10,7 +10,7 @@ import scodec.codecs._
 import scodec.{Attempt, Codec, DecodeResult}
 
 import scala.annotation.switch
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 
 /**
@@ -185,7 +185,7 @@ object EvmOp {
     val ONE = BigInt(1)
     val MOD256 = ONE << 256
 
-    def stop = (state: EvmState) => { state.stop }
+    def stop = (state: EvmState) => { Try(state) }
     def add    = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x + y) }
     def mul    = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x * y) }
     def sub    = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x - y) }
@@ -207,8 +207,8 @@ object EvmOp {
     def calldataload  = (offset: Int) => (state: EvmState) => { state.push(state.environment.call.callData.slice(offset, offset + EvmWord.BYTES).padTo(EvmWord.BYTES, 0.toByte)) }
     def calldatasize  = (state: EvmState) => { state.push(state.environment.call.callData.size) }
     def calldatacopy  = (to: Int) => (from: Int) => (len: Int) => (state: EvmState) => { state.memStore(to, state.environment.call.callData.slice(from, from + len).padTo(len, 0.toByte)) }
-    def codesize      = (state: EvmState) => { state.push(state.execution.code.size) }
-    def codecopy      = (to: Int) => (from: Int) => (len: Int) => (state: EvmState) => { state.memStore(to, state.execution.code.slice(from, from + len).padTo(len, STOP.opcode.toByte)) }
+    def codesize      = (state: EvmState) => { state.push(state.execution.program.code.size) }
+    def codecopy      = (to: Int) => (from: Int) => (len: Int) => (state: EvmState) => { state.memStore(to, state.execution.program.code.slice(from, from + len).padTo(len, STOP.opcode.toByte)) }
 
     def pop     = (state: EvmState) => { state.pop.map(_._2) }
 
@@ -239,146 +239,147 @@ object EvmOp {
   }
 
 
-  // EVM operation codec (to/from bytes)
-  val codec: Codec[EvmOp] = {
+  // Decode EVM operation
+  // Except for PUSH operations, this simply means reading a single byte and mapping to the appropriate operation
+  // Remaining bytes are returned to support repetitive calls, consuming a single variable-sized operation each time
+  // Note the use of the @switch annotation to emit tablelookup
+  // See: http://www.scala-lang.org/api/current/index.html#scala.annotation.switch
+  def decode(code: Seq[Byte]): Try[(EvmOp, Seq[Byte])] = {
+    Try {
+      (code.head: @switch) match {
+        case 0x00 => (STOP        , code.tail)
+        case 0x01 => (ADD         , code.tail)
+        case 0x02 => (MUL         , code.tail)
+        case 0x03 => (SUB         , code.tail)
+        case 0x04 => (DIV         , code.tail)
+//        case 0x05 => (SDIV        , code.tail)
+//        case 0x06 => (MOD         , code.tail)
+//        case 0x07 => (SMOD        , code.tail)
+//        case 0x08 => (ADDMOD      , code.tail)
+//        case 0x09 => (MULMOD      , code.tail)
+//        case 0x0a => (EXP         , code.tail)
+//        case 0x0b => (SIGNEXTEND  , code.tail)
+//        case 0x10 => (LT          , code.tail)
+//        case 0x11 => (GT          , code.tail)
+//        case 0x12 => (SLT         , code.tail)
+//        case 0x13 => (SGT         , code.tail)
+//        case 0x14 => (EQ          , code.tail)
+        case 0x15 => (ISZERO      , code.tail)
+        case 0x16 => (AND         , code.tail)
+        case 0x17 => (OR          , code.tail)
+        case 0x18 => (XOR         , code.tail)
+        case 0x19 => (NOT         , code.tail)
+        case 0x1a => (BYTE        , code.tail)
+        case 0x20 => (SHA3        , code.tail)
+        case 0x30 => (ADDRESS     , code.tail)
+//        case 0x31 => (BALANCE     , code.tail)
+        case 0x32 => (ORIGIN      , code.tail)
+        case 0x33 => (CALLER      , code.tail)
+        case 0x34 => (CALLVALUE   , code.tail)
+        case 0x35 => (CALLDATALOAD, code.tail)
+        case 0x36 => (CALLDATASIZE, code.tail)
+        case 0x37 => (CALLDATACOPY, code.tail)
+        case 0x38 => (CODESIZE    , code.tail)
+        case 0x39 => (CODECOPY    , code.tail)
+//        case 0x3a => (GASPRICE    , code.tail)
+//        case 0x3b => (EXTCODESIZE , code.tail)
+//        case 0x3c => (EXTCODECOPY , code.tail)
+//        case 0x40 => (BLOCKHASH   , code.tail)
+//        case 0x41 => (COINBASE    , code.tail)
+//        case 0x42 => (TIMESTAMP   , code.tail)
+//        case 0x43 => (NUMBER      , code.tail)
+//        case 0x44 => (DIFFICULTY  , code.tail)
+//        case 0x45 => (GASLIMIT    , code.tail)
+        case 0x50 => (POP         , code.tail)
+        case 0x51 => (MLOAD       , code.tail)
+        case 0x52 => (MSTORE      , code.tail)
+        case 0x53 => (MSTORE8     , code.tail)
+        case 0x54 => (SLOAD       , code.tail)
+        case 0x55 => (SSTORE      , code.tail)
+//        case 0x56 => (JUMP        , code.tail)
+//        case 0x57 => (JUMPI       , code.tail)
+        case 0x58 => (PC          , code.tail)
+        case 0x59 => (MSIZE       , code.tail)
+//        case 0x5a => (GAS         , code.tail)
+        case 0x5b => (JUMPDEST    , code.tail)
+        case 0x60 => code.splitAt(1 ) match { case (bytes, tail) => (PUSH1 (bytes), tail) }
+        case 0x61 => code.splitAt(2 ) match { case (bytes, tail) => (PUSH2 (bytes), tail) }
+        case 0x62 => code.splitAt(3 ) match { case (bytes, tail) => (PUSH3 (bytes), tail) }
+        case 0x63 => code.splitAt(4 ) match { case (bytes, tail) => (PUSH4 (bytes), tail) }
+        case 0x64 => code.splitAt(5 ) match { case (bytes, tail) => (PUSH5 (bytes), tail) }
+        case 0x65 => code.splitAt(6 ) match { case (bytes, tail) => (PUSH6 (bytes), tail) }
+        case 0x66 => code.splitAt(7 ) match { case (bytes, tail) => (PUSH7 (bytes), tail) }
+        case 0x67 => code.splitAt(8 ) match { case (bytes, tail) => (PUSH8 (bytes), tail) }
+        case 0x68 => code.splitAt(9 ) match { case (bytes, tail) => (PUSH9 (bytes), tail) }
+        case 0x69 => code.splitAt(10) match { case (bytes, tail) => (PUSH10(bytes), tail) }
+        case 0x6a => code.splitAt(11) match { case (bytes, tail) => (PUSH11(bytes), tail) }
+        case 0x6b => code.splitAt(12) match { case (bytes, tail) => (PUSH12(bytes), tail) }
+        case 0x6c => code.splitAt(13) match { case (bytes, tail) => (PUSH13(bytes), tail) }
+        case 0x6d => code.splitAt(14) match { case (bytes, tail) => (PUSH14(bytes), tail) }
+        case 0x6e => code.splitAt(15) match { case (bytes, tail) => (PUSH15(bytes), tail) }
+        case 0x6f => code.splitAt(16) match { case (bytes, tail) => (PUSH16(bytes), tail) }
+        case 0x70 => code.splitAt(17) match { case (bytes, tail) => (PUSH17(bytes), tail) }
+        case 0x71 => code.splitAt(18) match { case (bytes, tail) => (PUSH18(bytes), tail) }
+        case 0x72 => code.splitAt(19) match { case (bytes, tail) => (PUSH19(bytes), tail) }
+        case 0x73 => code.splitAt(20) match { case (bytes, tail) => (PUSH20(bytes), tail) }
+        case 0x74 => code.splitAt(21) match { case (bytes, tail) => (PUSH21(bytes), tail) }
+        case 0x75 => code.splitAt(22) match { case (bytes, tail) => (PUSH22(bytes), tail) }
+        case 0x76 => code.splitAt(23) match { case (bytes, tail) => (PUSH23(bytes), tail) }
+        case 0x77 => code.splitAt(24) match { case (bytes, tail) => (PUSH24(bytes), tail) }
+        case 0x78 => code.splitAt(25) match { case (bytes, tail) => (PUSH25(bytes), tail) }
+        case 0x79 => code.splitAt(26) match { case (bytes, tail) => (PUSH26(bytes), tail) }
+        case 0x7a => code.splitAt(27) match { case (bytes, tail) => (PUSH27(bytes), tail) }
+        case 0x7b => code.splitAt(28) match { case (bytes, tail) => (PUSH28(bytes), tail) }
+        case 0x7c => code.splitAt(29) match { case (bytes, tail) => (PUSH29(bytes), tail) }
+        case 0x7d => code.splitAt(30) match { case (bytes, tail) => (PUSH30(bytes), tail) }
+        case 0x7e => code.splitAt(31) match { case (bytes, tail) => (PUSH31(bytes), tail) }
+        case 0x7f => code.splitAt(32) match { case (bytes, tail) => (PUSH32(bytes), tail) }
+        case 0x80 => (DUP1        , code.tail)
+        case 0x81 => (DUP2        , code.tail)
+        case 0x82 => (DUP3        , code.tail)
+        case 0x83 => (DUP4        , code.tail)
+        case 0x84 => (DUP5        , code.tail)
+        case 0x85 => (DUP6        , code.tail)
+        case 0x86 => (DUP7        , code.tail)
+        case 0x87 => (DUP8        , code.tail)
+        case 0x88 => (DUP9        , code.tail)
+        case 0x89 => (DUP10       , code.tail)
+        case 0x8a => (DUP11       , code.tail)
+        case 0x8b => (DUP12       , code.tail)
+        case 0x8c => (DUP13       , code.tail)
+        case 0x8d => (DUP14       , code.tail)
+        case 0x8e => (DUP15       , code.tail)
+        case 0x8f => (DUP16       , code.tail)
+        case 0x90 => (SWAP1       , code.tail)
+        case 0x91 => (SWAP2       , code.tail)
+        case 0x92 => (SWAP3       , code.tail)
+        case 0x93 => (SWAP4       , code.tail)
+        case 0x94 => (SWAP5       , code.tail)
+        case 0x95 => (SWAP6       , code.tail)
+        case 0x96 => (SWAP7       , code.tail)
+        case 0x97 => (SWAP8       , code.tail)
+        case 0x98 => (SWAP9       , code.tail)
+        case 0x99 => (SWAP10      , code.tail)
+        case 0x9a => (SWAP11      , code.tail)
+        case 0x9b => (SWAP12      , code.tail)
+        case 0x9c => (SWAP13      , code.tail)
+        case 0x9d => (SWAP14      , code.tail)
+        case 0x9e => (SWAP15      , code.tail)
+        case 0x9f => (SWAP16      , code.tail)
+//        case 0xa0 => (LOG0        , code.tail)
+//        case 0xa1 => (LOG1        , code.tail)
+//        case 0xa2 => (LOG2        , code.tail)
+//        case 0xa3 => (LOG3        , code.tail)
+//        case 0xa4 => (LOG4        , code.tail)
 
-    def encode(op: EvmOp): Attempt[BitVector] = bytes.encode(ByteVector(op.code))
-
-    // Decode EVM operation
-    // Except for PUSH operations, this simply means reading a single byte and mapping to the appropriate operation
-    // Note the use of the @switch annotation to emit tablelookup
-    // See: http://www.scala-lang.org/api/current/index.html#scala.annotation.switch
-    def decode(bits: BitVector): Attempt[DecodeResult[EvmOp]] = for {
-      opcode <- scodec.codecs.byte.decode(bits)
-      op <- (opcode.value: @switch) match {
-        case 0x00 => Successful(DecodeResult(STOP        , opcode.remainder))
-        case 0x01 => Successful(DecodeResult(ADD         , opcode.remainder))
-        case 0x02 => Successful(DecodeResult(MUL         , opcode.remainder))
-        case 0x03 => Successful(DecodeResult(SUB         , opcode.remainder))
-        case 0x04 => Successful(DecodeResult(DIV         , opcode.remainder))
-        //      case 0x05 => Successful(DecodeResult(SDIV        , opcode.remainder))
-        //      case 0x06 => Successful(DecodeResult(MOD         , opcode.remainder))
-        //      case 0x07 => Successful(DecodeResult(SMOD        , opcode.remainder))
-        //      case 0x08 => Successful(DecodeResult(ADDMOD      , opcode.remainder))
-        //      case 0x09 => Successful(DecodeResult(MULMOD      , opcode.remainder))
-        //      case 0x0a => Successful(DecodeResult(EXP         , opcode.remainder))
-        //      case 0x0b => Successful(DecodeResult(SIGNEXTEND  , opcode.remainder))
-        //      case 0x10 => Successful(DecodeResult(LT          , opcode.remainder))
-        //      case 0x11 => Successful(DecodeResult(GT          , opcode.remainder))
-        //      case 0x12 => Successful(DecodeResult(SLT         , opcode.remainder))
-        //      case 0x13 => Successful(DecodeResult(SGT         , opcode.remainder))
-        //      case 0x14 => Successful(DecodeResult(EQ          , opcode.remainder))
-        case 0x15 => Successful(DecodeResult(ISZERO      , opcode.remainder))
-        case 0x16 => Successful(DecodeResult(AND         , opcode.remainder))
-        case 0x17 => Successful(DecodeResult(OR          , opcode.remainder))
-        case 0x18 => Successful(DecodeResult(XOR         , opcode.remainder))
-        case 0x19 => Successful(DecodeResult(NOT         , opcode.remainder))
-        case 0x1a => Successful(DecodeResult(BYTE        , opcode.remainder))
-        case 0x20 => Successful(DecodeResult(SHA3        , opcode.remainder))
-        case 0x30 => Successful(DecodeResult(ADDRESS     , opcode.remainder))
-        //      case 0x31 => Successful(DecodeResult(BALANCE     , opcode.remainder))
-        case 0x32 => Successful(DecodeResult(ORIGIN      , opcode.remainder))
-        case 0x33 => Successful(DecodeResult(CALLER      , opcode.remainder))
-        case 0x34 => Successful(DecodeResult(CALLVALUE   , opcode.remainder))
-        case 0x35 => Successful(DecodeResult(CALLDATALOAD, opcode.remainder))
-        case 0x36 => Successful(DecodeResult(CALLDATASIZE, opcode.remainder))
-        case 0x37 => Successful(DecodeResult(CALLDATACOPY, opcode.remainder))
-        case 0x38 => Successful(DecodeResult(CODESIZE    , opcode.remainder))
-        case 0x39 => Successful(DecodeResult(CODECOPY    , opcode.remainder))
-        //      case 0x3a => Successful(DecodeResult(GASPRICE    , opcode.remainder))
-        //      case 0x3b => Successful(DecodeResult(EXTCODESIZE , opcode.remainder))
-        //      case 0x3c => Successful(DecodeResult(EXTCODECOPY , opcode.remainder))
-        //      case 0x40 => Successful(DecodeResult(BLOCKHASH   , opcode.remainder))
-        //      case 0x41 => Successful(DecodeResult(COINBASE    , opcode.remainder))
-        //      case 0x42 => Successful(DecodeResult(TIMESTAMP   , opcode.remainder))
-        //      case 0x43 => Successful(DecodeResult(NUMBER      , opcode.remainder))
-        //      case 0x44 => Successful(DecodeResult(DIFFICULTY  , opcode.remainder))
-        //      case 0x45 => Successful(DecodeResult(GASLIMIT    , opcode.remainder))
-        case 0x50 => Successful(DecodeResult(POP         , opcode.remainder))
-        case 0x51 => Successful(DecodeResult(MLOAD       , opcode.remainder))
-        case 0x52 => Successful(DecodeResult(MSTORE      , opcode.remainder))
-        case 0x53 => Successful(DecodeResult(MSTORE8     , opcode.remainder))
-        case 0x54 => Successful(DecodeResult(SLOAD       , opcode.remainder))
-        case 0x55 => Successful(DecodeResult(SSTORE      , opcode.remainder))
-        //      case 0x56 => Successful(DecodeResult(JUMP        , opcode.remainder))
-        //      case 0x57 => Successful(DecodeResult(JUMPI       , opcode.remainder))
-        case 0x58 => Successful(DecodeResult(PC          , opcode.remainder))
-        case 0x59 => Successful(DecodeResult(MSIZE       , opcode.remainder))
-        //      case 0x5a => Successful(DecodeResult(GAS         , opcode.remainder))
-        case 0x5b => Successful(DecodeResult(JUMPDEST    , opcode.remainder))
-        case 0x60 => bytes(1 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH1 (bytes.value.toSeq), bytes.remainder)))
-        case 0x61 => bytes(2 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH2 (bytes.value.toSeq), bytes.remainder)))
-        case 0x62 => bytes(3 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH3 (bytes.value.toSeq), bytes.remainder)))
-        case 0x63 => bytes(4 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH4 (bytes.value.toSeq), bytes.remainder)))
-        case 0x64 => bytes(5 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH5 (bytes.value.toSeq), bytes.remainder)))
-        case 0x65 => bytes(6 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH6 (bytes.value.toSeq), bytes.remainder)))
-        case 0x66 => bytes(7 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH7 (bytes.value.toSeq), bytes.remainder)))
-        case 0x67 => bytes(8 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH8 (bytes.value.toSeq), bytes.remainder)))
-        case 0x68 => bytes(9 ).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH9 (bytes.value.toSeq), bytes.remainder)))
-        case 0x69 => bytes(10).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH10(bytes.value.toSeq), bytes.remainder)))
-        case 0x6a => bytes(11).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH11(bytes.value.toSeq), bytes.remainder)))
-        case 0x6b => bytes(12).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH12(bytes.value.toSeq), bytes.remainder)))
-        case 0x6c => bytes(13).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH13(bytes.value.toSeq), bytes.remainder)))
-        case 0x6d => bytes(14).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH14(bytes.value.toSeq), bytes.remainder)))
-        case 0x6e => bytes(15).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH15(bytes.value.toSeq), bytes.remainder)))
-        case 0x6f => bytes(16).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH16(bytes.value.toSeq), bytes.remainder)))
-        case 0x70 => bytes(17).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH17(bytes.value.toSeq), bytes.remainder)))
-        case 0x71 => bytes(18).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH18(bytes.value.toSeq), bytes.remainder)))
-        case 0x72 => bytes(19).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH19(bytes.value.toSeq), bytes.remainder)))
-        case 0x73 => bytes(20).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH20(bytes.value.toSeq), bytes.remainder)))
-        case 0x74 => bytes(21).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH21(bytes.value.toSeq), bytes.remainder)))
-        case 0x75 => bytes(22).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH22(bytes.value.toSeq), bytes.remainder)))
-        case 0x76 => bytes(23).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH23(bytes.value.toSeq), bytes.remainder)))
-        case 0x77 => bytes(24).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH24(bytes.value.toSeq), bytes.remainder)))
-        case 0x78 => bytes(25).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH25(bytes.value.toSeq), bytes.remainder)))
-        case 0x79 => bytes(26).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH26(bytes.value.toSeq), bytes.remainder)))
-        case 0x7a => bytes(27).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH27(bytes.value.toSeq), bytes.remainder)))
-        case 0x7b => bytes(28).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH28(bytes.value.toSeq), bytes.remainder)))
-        case 0x7c => bytes(29).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH29(bytes.value.toSeq), bytes.remainder)))
-        case 0x7d => bytes(30).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH30(bytes.value.toSeq), bytes.remainder)))
-        case 0x7e => bytes(31).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH31(bytes.value.toSeq), bytes.remainder)))
-        case 0x7f => bytes(32).decode(opcode.remainder).flatMap(bytes => Successful(DecodeResult(PUSH32(bytes.value.toSeq), bytes.remainder)))
-        case 0x80 => Successful(DecodeResult(DUP1        , opcode.remainder))
-        case 0x81 => Successful(DecodeResult(DUP2        , opcode.remainder))
-        case 0x82 => Successful(DecodeResult(DUP3        , opcode.remainder))
-        case 0x83 => Successful(DecodeResult(DUP4        , opcode.remainder))
-        case 0x84 => Successful(DecodeResult(DUP5        , opcode.remainder))
-        case 0x85 => Successful(DecodeResult(DUP6        , opcode.remainder))
-        case 0x86 => Successful(DecodeResult(DUP7        , opcode.remainder))
-        case 0x87 => Successful(DecodeResult(DUP8        , opcode.remainder))
-        case 0x88 => Successful(DecodeResult(DUP9        , opcode.remainder))
-        case 0x89 => Successful(DecodeResult(DUP10       , opcode.remainder))
-        case 0x8a => Successful(DecodeResult(DUP11       , opcode.remainder))
-        case 0x8b => Successful(DecodeResult(DUP12       , opcode.remainder))
-        case 0x8c => Successful(DecodeResult(DUP13       , opcode.remainder))
-        case 0x8d => Successful(DecodeResult(DUP14       , opcode.remainder))
-        case 0x8e => Successful(DecodeResult(DUP15       , opcode.remainder))
-        case 0x8f => Successful(DecodeResult(DUP16       , opcode.remainder))
-        case 0x90 => Successful(DecodeResult(SWAP1       , opcode.remainder))
-        case 0x91 => Successful(DecodeResult(SWAP2       , opcode.remainder))
-        case 0x92 => Successful(DecodeResult(SWAP3       , opcode.remainder))
-        case 0x93 => Successful(DecodeResult(SWAP4       , opcode.remainder))
-        case 0x94 => Successful(DecodeResult(SWAP5       , opcode.remainder))
-        case 0x95 => Successful(DecodeResult(SWAP6       , opcode.remainder))
-        case 0x96 => Successful(DecodeResult(SWAP7       , opcode.remainder))
-        case 0x97 => Successful(DecodeResult(SWAP8       , opcode.remainder))
-        case 0x98 => Successful(DecodeResult(SWAP9       , opcode.remainder))
-        case 0x99 => Successful(DecodeResult(SWAP10      , opcode.remainder))
-        case 0x9a => Successful(DecodeResult(SWAP11      , opcode.remainder))
-        case 0x9b => Successful(DecodeResult(SWAP12      , opcode.remainder))
-        case 0x9c => Successful(DecodeResult(SWAP13      , opcode.remainder))
-        case 0x9d => Successful(DecodeResult(SWAP14      , opcode.remainder))
-        case 0x9e => Successful(DecodeResult(SWAP15      , opcode.remainder))
-        case 0x9f => Successful(DecodeResult(SWAP16      , opcode.remainder))
-        //      case 0xa0 => Successful(DecodeResult(LOG0        , opcode.remainder))
-        //      case 0xa1 => Successful(DecodeResult(LOG1        , opcode.remainder))
-        //      case 0xa2 => Successful(DecodeResult(LOG2        , opcode.remainder))
-        //      case 0xa3 => Successful(DecodeResult(LOG3        , opcode.remainder))
-        //      case 0xa4 => Successful(DecodeResult(LOG4        , opcode.remainder))
+        case opcode => throw new EvmDecodeException(f"invalid opcode 0x$opcode%2x")
       }
-    } yield op
-
-    Codec(encode _, decode _)
+    } recoverWith {
+      case e: IllegalArgumentException => Failure(new EvmDecodeException(e.getMessage))
+    }
   }
 
 }
+
+
+class EvmDecodeException(msg: String) extends EvmException(msg)

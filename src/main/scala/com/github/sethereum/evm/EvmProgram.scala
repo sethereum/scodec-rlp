@@ -1,113 +1,47 @@
 package com.github.sethereum.evm
 
-import scodec.Attempt.Successful
-import scodec.{DecodeResult, Attempt, Codec}
-import scodec.bits.BitVector
+import com.github.sethereum.evm.EvmOp.JUMPDEST
 
-import scala.collection.generic.CanBuildFrom
-import scala.collection.mutable.{ArrayBuffer, Builder}
-import scala.collection.{IndexedSeqLike, LinearSeq, LinearSeqOptimized}
-import scala.util.Try
-
-import scodec.codecs._
-
-//final class EvmOpSeq private (val code: Seq[Byte])
-//  extends LinearSeq[EvmOp] with LinearSeqOptimized[EvmOp, EvmOpSeq] {
-//
-//  val headTailOpt: Option[(EvmOp, EvmOpSeq)] = code match {
-//    case EvmOp(op, tail) => Some((op, EvmOpSeq.fromCode(tail)))
-//    case _ => None
-//  }
-//
-//  override protected[this] def newBuilder: Builder[EvmOp, EvmOpSeq] = EvmOpSeq.newBuilder
-//
-//  override def isEmpty: Boolean = code.isEmpty
-//
-//  override def tail: EvmOpSeq = super.tail
-//
-//  override def head: EvmOp = super.head
-//}
-//
-//object EvmOpSeq {
-//
-//  def fromSeq(ops: Seq[EvmOp]): EvmOpSeq = {
-//    val size = ops.foldLeft(0)(_ + _.size)
-//    val buf = ArrayBuffer[Byte]()
-//    buf.sizeHint(size)
-//    val code = ops.foldLeft(buf)(_ ++= _.code)
-//    fromCode(code)
-//  }
-//
-//  def fromCode(code: Seq[Byte]) = new EvmOpSeq(code)
-//
-//  def apply(code: Byte*) = fromCode(code)
-//
-//  def newBuilder: Builder[EvmOp, EvmOpSeq] =
-//    new ArrayBuffer mapResult fromSeq
-//
-//
-//}
+import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
+import scala.util.{Failure, Success, Try}
 
 
-
-final class EvmProgram private (private val ops: IndexedSeq[EvmOp], val jumps: Map[Int, Int])
-  extends IndexedSeq[EvmOp] with IndexedSeqLike[EvmOp, EvmProgram] {
-
-  override protected[this] def newBuilder: Builder[EvmOp, EvmProgram] = EvmProgram.newBuilder
-
-  override def length: Int = ops.length
-
-  override def apply(idx: Int): EvmOp = ops.apply(idx)
-}
+/**
+ * EVM program as a sequence of bytes (bytecode) and the set of valid jump destinations.
+ *
+ * @param code program bytecode
+ * @param jumpDests set of valid jump destinations
+ */
+case class EvmProgram private (code: IndexedSeq[Byte], jumpDests: Set[Int])
 
 object EvmProgram {
 
-  import EvmOp._
+  val STOP = EvmProgram(Seq(EvmOp.STOP))
 
-  def fromOps(ops: IndexedSeq[EvmOp]): EvmProgram = {
-    // Build the jump dest map by traversing the operations
-    val (codeSize, opsSize, jumps) = ops.foldLeft((0, 0, Map.empty[Int, Int])) {
-      case ((codeSize, opsSize, jumpDests), op) =>
-        (codeSize + op.size, opsSize + 1, op match {
-          case JUMPDEST => jumpDests + (codeSize -> opsSize)
-          case _ => jumpDests
-        })
+  def decode(code: IndexedSeq[Byte]): Try[EvmProgram] = {
+
+    @tailrec
+    def decodeOp(code: Seq[Byte], i: Int, jumpDests: Set[Int]): Try[Set[Int]] = {
+      EvmOp.decode(code) match {
+        case Success((op @ JUMPDEST, tail)) => decodeOp(tail, i + op.size, jumpDests + i)
+        case Success((op, tail)) => decodeOp(tail, i + op.size, jumpDests)
+        case Failure(t) => Failure(new EvmDecodeException(s"decodeOp($i): ${t.getMessage}"))
+      }
     }
-    new EvmProgram(ops, jumps)
+
+    decodeOp(code, 0, Set.empty[Int]).map(jd => EvmProgram(code, jd))
   }
 
-//  def fromCode(code: Byte*): Try[EvmProgram] = {
-//    EvmOp.codec.decode(BitVector(code))
-//  }
-
-  def apply(ops: IndexedSeq[EvmOp]) = fromOps(ops)
-
-  def newBuilder: Builder[EvmOp, EvmProgram] =
-    new ArrayBuffer mapResult fromOps
-
-  implicit def canBuildFrom: CanBuildFrom[EvmProgram, EvmOp, EvmProgram] =
-    new CanBuildFrom[EvmProgram, EvmOp, EvmProgram] {
-      def apply(): Builder[EvmOp, EvmProgram] = newBuilder
-      def apply(from: EvmProgram): Builder[EvmOp, EvmProgram] = newBuilder
+  def apply(ops: Seq[EvmOp]): EvmProgram = {
+    val codeSize = ops.foldLeft(0)(_ + _.size)
+    val buf = ArrayBuffer.empty[Byte]
+    buf.sizeHint(codeSize)
+    val (code, jumpDests) = ops.foldLeft((buf, Set.empty[Int])) {
+      case ((code, jumpDests), op @ JUMPDEST) => (code ++ op.code, jumpDests + code.size)
+      case ((code, jumpDests), op) => (code ++ op.code, jumpDests)
     }
-
-
-  val codec: Codec[EvmProgram] = {
-
-    def encode(program: EvmProgram): Attempt[BitVector] = {
-      val ops = program.ops
-      val size = ops.foldLeft(0)(_ + _.size)
-      val buf = ArrayBuffer[Byte]()
-      buf.sizeHint(size)
-      val code = ops.foldLeft(buf)(_ ++ _.code)
-
-      Successful(BitVector(code))
-    }
-
-    def decode(bits: BitVector): Attempt[DecodeResult[EvmProgram]] = for {
-      ops <- list(EvmOp.codec).decode(bits)
-    } yield ops.map(list => EvmProgram.fromOps(list.toIndexedSeq))
-
-    Codec(encode _, decode _)
+    EvmProgram(code, jumpDests)
   }
+
 }

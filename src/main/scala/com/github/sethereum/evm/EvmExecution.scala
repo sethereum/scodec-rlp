@@ -1,39 +1,38 @@
 package com.github.sethereum.evm
 
+import com.github.sethereum.evm.EvmOp.STOP
+
 import scala.util.Try
 
 
-case class EvmExecution private (
-    running: Boolean = true,
-    pc: Int = 0,
-    code: Seq[Byte] = Seq(EvmOp.STOP.opcode.toByte),
-    program: EvmProgram = EvmProgram(List(EvmOp.STOP).toIndexedSeq))
-  extends EvmExecutionOps[EvmExecution]
+case class EvmExecution private (program: EvmProgram, pc: Int = 0)
+  extends EvmExecutionOps[EvmExecution] with Iterator[EvmExecution]
 {
+  val op: EvmOp = {
+    if (pc < program.code.size) {
+      // Note: This is safe since program can only be initialized with valid code
+      EvmOp.decode(program.code.view.drop(pc)).get._1
+    } else STOP
+  }
 
-  // TODO: Validate program counter
+  override def hasNext: Boolean = op == STOP
 
-//  def this(code: Seq[Byte]) = this(code = code, jumpDestinations = jumpDestinations(code))
+  override def next(): EvmExecution = copy(pc = pc + op.size)
 
-//  private def jumpDestinations(code: Seq[Byte]): Seq[Int] = Seq.empty
-
-  override def stop: Try[EvmExecution] = Try(copy(running = false))
-
-//  override def jump(pc: Int): Try[EvmExecution] = Try(
-//    if (jumpDestinations(pc)) copy(pc = pc)
-//    else throw new EvmException(s"invalid jump destination $pc")
-//  )
+  override def jump(dest: Int): Try[EvmExecution] = Try(
+    if (program.jumpDests(dest)) copy(pc = dest)
+    else throw new EvmException(s"invalid jump destination $dest")
+  )
 }
 
 object EvmExecution {
 
-  def apply(): EvmExecution = new EvmExecution()
+  def apply(): EvmExecution = new EvmExecution(EvmProgram.STOP)
 
-//  def apply(code: Seq[Byte]): EvmExecution = new EvmExecution(code)
+  def apply(program: EvmProgram): EvmExecution = new EvmExecution(program)
 }
 
 trait EvmExecutionOps[T <: EvmExecutionOps[T]] { this: T =>
-  def stop: Try[T]
-//  def jump(pc: Int): Try[T]
+  def jump(pc: Int): Try[T]
 }
 
