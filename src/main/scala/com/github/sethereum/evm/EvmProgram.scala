@@ -19,18 +19,18 @@ object EvmProgram {
 
   val STOP = EvmProgram(Seq(EvmOp.STOP))
 
-  def decode(code: IndexedSeq[Byte]): Try[EvmProgram] = {
+  def apply(code: IndexedSeq[Byte]): Try[EvmProgram] = {
 
     @tailrec
-    def decodeOp(code: Seq[Byte], i: Int, jumpDests: Set[Int]): Try[Set[Int]] = {
+    def decode(code: Seq[Byte], i: Int, jumpDests: Set[Int]): Try[Set[Int]] = {
       EvmOp.decode(code) match {
-        case Success((op @ JUMPDEST, tail)) => decodeOp(tail, i + op.size, jumpDests + i)
-        case Success((op, tail)) => decodeOp(tail, i + op.size, jumpDests)
+        case Success((op @ JUMPDEST, tail)) => decode(tail, i + op.size, jumpDests + i)
+        case Success((op, tail)) => decode(tail, i + op.size, jumpDests)
         case Failure(t) => Failure(new EvmDecodeException(s"decodeOp($i): ${t.getMessage}"))
       }
     }
 
-    decodeOp(code, 0, Set.empty[Int]).map(jd => EvmProgram(code, jd))
+    decode(code, 0, Set.empty[Int]).map(jd => EvmProgram(code, jd))
   }
 
   def apply(ops: Seq[EvmOp]): EvmProgram = {

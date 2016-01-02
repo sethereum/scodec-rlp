@@ -21,7 +21,6 @@ class EvmOpSpec extends WordSpec with EvmSpecBase {
       a [TestFailedException] should be thrownBy checkOperation(ADD, makeState(ONE, ZERO), makeState(valueOf(2)))
     }
 
-
   }
 
 }

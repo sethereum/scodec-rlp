@@ -22,5 +22,10 @@ package object evm {
   }
 
   type EvmValue = BigInt
+  type EvmTimestamp = Long
+
+  // Block header constraints (see section 4.3.4)
+  val MinimumDifficulty = 131072
+  val MiniumGasLimit = 5000
 
 }

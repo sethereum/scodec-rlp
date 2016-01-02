@@ -4,11 +4,6 @@ import java.math.BigInteger
 
 import scala.language.implicitConversions
 
-trait EvmWord2 {
-  val data: Seq[Byte]
-  def bytes: Array[Byte]
-}
-
 
 final case class EvmWord (val data: Seq[Byte]) {
   require(data.length <= EvmWord.BYTES, s"invalid word length ${data.length}")
@@ -22,6 +17,8 @@ final case class EvmWord (val data: Seq[Byte]) {
       data.toArray[Byte].copyToArray(padded, EvmWord.BYTES - data.length)
       EvmWord(padded)
     }
+
+  def zero: Boolean = (this eq EvmWord.ZERO) || data.forall(_ == 0)
 }
 
 object EvmWord {
@@ -53,6 +50,11 @@ object EvmWord {
     // TODO: Properly handle signed ints
     implicit def wordToInt(word: EvmWord) = new BigInteger(word.bytes).intValue()
     implicit def intToWord(value: Int): EvmWord = EvmWord(BigInteger.valueOf(value).toByteArray)
+
+    // Long
+    // TODO: Properly handle signed longs
+    implicit def wordToLong(word: EvmWord) = new BigInteger(word.bytes).longValue()
+    implicit def longToWord(value: Long): EvmWord = EvmWord(BigInteger.valueOf(value).toByteArray)
 
 
     // BigInt

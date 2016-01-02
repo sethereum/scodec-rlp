@@ -22,13 +22,15 @@ import scala.util.{Failure, Try}
 sealed abstract class EvmOp(val opcode: Int)(val pop: Int, push: Int)(val transition: StateTransitionFunction) {
   require(opcode >= 0 && opcode <= 0xff, f"invalid opcode 0x$opcode%2x")
 
+  lazy val name = getClass.getSimpleName.filterNot(_ == '$')
+
   def size: Int = 1
   def code: Seq[Byte] = Seq(opcode.toByte)
   def apply(state: EvmState) = transition(state)
 }
 
 /**
- * EVM PUSH operations which encapsulate data to be pushed.
+ * EVM PUSH operations encapsulate data to be pushed.
  *
  * @param opcode
  * @param bytes
@@ -87,19 +89,19 @@ object EvmOp {
   //  case object EXTCODESIZE   extends EvmOp   (0x3b)  (1, 1)    (extcodesize )
   //  case object EXTCODECOPY   extends EvmOp   (0x3c)  (4, 0)    (extcodecopy )
   //  case object BLOCKHASH     extends EvmOp   (0x40)  (1, 1)    (blockhash   )
-  //  case object COINBASE      extends EvmOp   (0x41)  (0, 1)    (coinbase    )
-  //  case object TIMESTAMP     extends EvmOp   (0x42)  (0, 1)    (timestamp   )
-  //  case object NUMBER        extends EvmOp   (0x43)  (0, 1)    (number      )
-  //  case object DIFFICULTY    extends EvmOp   (0x44)  (0, 1)    (difficulty  )
-  //  case object GASLIMIT      extends EvmOp   (0x45)  (0, 1)    (gaslimit    )
+  case object COINBASE      extends EvmOp   (0x41)  (0, 1)    (coinbase    )
+  case object TIMESTAMP     extends EvmOp   (0x42)  (0, 1)    (timestamp   )
+  case object NUMBER        extends EvmOp   (0x43)  (0, 1)    (number      )
+  case object DIFFICULTY    extends EvmOp   (0x44)  (0, 1)    (difficulty  )
+  case object GASLIMIT      extends EvmOp   (0x45)  (0, 1)    (gaslimit    )
   case object POP           extends EvmOp   (0x50)  (1, 0)    (pop         )
   case object MLOAD         extends EvmOp   (0x51)  (1, 1)    (mload       )
   case object MSTORE        extends EvmOp   (0x52)  (2, 0)    (mstore      )
   case object MSTORE8       extends EvmOp   (0x53)  (2, 0)    (mstore8     )
   case object SLOAD         extends EvmOp   (0x54)  (1, 1)    (sload       )
   case object SSTORE        extends EvmOp   (0x55)  (2, 0)    (sstore      )
-  //  case object JUMP          extends EvmOp   (0x56)  (1, 0)    (jump        )
-  //  case object JUMPI         extends EvmOp   (0x57)  (2, 0)    (jumpi       )
+  case object JUMP          extends EvmOp   (0x56)  (1, 0)    (jump        )
+  case object JUMPI         extends EvmOp   (0x57)  (2, 0)    (jumpi       )
   case object PC            extends EvmOp   (0x58)  (0, 1)    (pc          )
   case object MSIZE         extends EvmOp   (0x59)  (0, 1)    (msize       )
   //  case object GAS           extends EvmOp   (0x5a)  (0, 1)    (gas         )
@@ -173,6 +175,11 @@ object EvmOp {
   //  case object LOG2          extends EvmOp   (0xa2)  (4, 0)    (log2        )
   //  case object LOG3          extends EvmOp   (0xa3)  (5, 0)    (log3        )
   //  case object LOG4          extends EvmOp   (0xa4)  (6, 0)    (log4        )
+  //  case object CREATE          extends EvmOp   (0xf0)  (3, 1)    (create      )
+  //  case object CALL            extends EvmOp   (0xf1)  (7, 1)    (call        )
+  //  case object CALLCODE        extends EvmOp   (0xf2)  (7, 1)    (callcode    )
+  //  case object RETURN          extends EvmOp   (0xf3)  (2, 0)    (ret         )
+  //  case object SUICIDE         extends EvmOp   (0xff)  (1, 0)    (suicide     )
 
 
   /**
@@ -191,7 +198,7 @@ object EvmOp {
     def sub    = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x - y) }
     def div    = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(if (y == ZERO) ZERO else x / y) }
 
-    def iszero = (x: BigInt) =>                 (state: EvmState) => { state.push(if (x == ZERO) ONE else ZERO) }
+    def iszero = (x: EvmWord) =>                (state: EvmState) => { state.push(if (x.zero) ONE else ZERO) }
     def and    = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x & y) }
     def or     = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x | y) }
     def xor    = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x ^ y) }
@@ -210,6 +217,12 @@ object EvmOp {
     def codesize      = (state: EvmState) => { state.push(state.execution.program.code.size) }
     def codecopy      = (to: Int) => (from: Int) => (len: Int) => (state: EvmState) => { state.memStore(to, state.execution.program.code.slice(from, from + len).padTo(len, STOP.opcode.toByte)) }
 
+    def coinbase      = (state: EvmState) => { state.push(state.environment.block.header.coinbase) }
+    def timestamp     = (state: EvmState) => { state.push(state.environment.block.header.timestamp) }
+    def number        = (state: EvmState) => { state.push(state.environment.block.header.number) }
+    def difficulty    = (state: EvmState) => { state.push(state.environment.block.header.difficulty) }
+    def gaslimit      = (state: EvmState) => { state.push(state.environment.block.header.gasLimit) }
+
     def pop     = (state: EvmState) => { state.pop.map(_._2) }
 
     def mload   = (offset: Int) =>                 (state: EvmState) => { state.memLoad(offset).flatMap { case (w, s) => s.push(w) } }
@@ -219,7 +232,8 @@ object EvmOp {
     def sload   = (k: EvmStorage.Key) =>                          (state: EvmState) => { state.sget(k).flatMap(v => state.push(v)) }
     def sstore  = (k: EvmStorage.Key) => (v: EvmStorage.Value) => (state: EvmState) => { state.sput(k, v) }
 
-    //    def jump             = (addr: Int) => (state: EvmState) => { state.push(state.execution.pc) }
+    def jump             = (pc: Int) =>                    (state: EvmState) => { state.jump(pc) }
+    def jumpi            = (pc: Int) => (cond: EvmWord) => (state: EvmState) => { if (cond.zero) Try(state) else state.jump(pc) }
     def pc               = (state: EvmState) => { state.push(state.execution.pc) }
     def msize            = (state: EvmState) => { state.push(state.memSize) }
     def jumpdest         = (state: EvmState) => { Try(state) }
@@ -285,11 +299,11 @@ object EvmOp {
 //        case 0x3b => (EXTCODESIZE , code.tail)
 //        case 0x3c => (EXTCODECOPY , code.tail)
 //        case 0x40 => (BLOCKHASH   , code.tail)
-//        case 0x41 => (COINBASE    , code.tail)
-//        case 0x42 => (TIMESTAMP   , code.tail)
-//        case 0x43 => (NUMBER      , code.tail)
-//        case 0x44 => (DIFFICULTY  , code.tail)
-//        case 0x45 => (GASLIMIT    , code.tail)
+        case 0x41 => (COINBASE    , code.tail)
+        case 0x42 => (TIMESTAMP   , code.tail)
+        case 0x43 => (NUMBER      , code.tail)
+        case 0x44 => (DIFFICULTY  , code.tail)
+        case 0x45 => (GASLIMIT    , code.tail)
         case 0x50 => (POP         , code.tail)
         case 0x51 => (MLOAD       , code.tail)
         case 0x52 => (MSTORE      , code.tail)
@@ -371,6 +385,11 @@ object EvmOp {
 //        case 0xa2 => (LOG2        , code.tail)
 //        case 0xa3 => (LOG3        , code.tail)
 //        case 0xa4 => (LOG4        , code.tail)
+//        case 0xf0 => (CREATE      , code.tail)
+//        case 0xf1 => (CALL        , code.tail)
+//        case 0xf2 => (CALLCODE    , code.tail)
+//        case 0xf3 => (RETURN      , code.tail)
+//        case 0xff => (SUICIDE     , code.tail)
 
         case opcode => throw new EvmDecodeException(f"invalid opcode 0x$opcode%2x")
       }

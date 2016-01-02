@@ -5,7 +5,8 @@ import java.math.BigInteger
 case class EvmEnvironment(
   address: EvmAddress = EvmAddress.ZERO,
   origin: EvmAddress = EvmAddress.ZERO,
-  call: EvmCall = EvmCall()
+  call: EvmCall = EvmCall(),
+  block: EvmBlock = EvmBlock()
 )
 
 case class EvmCall(
