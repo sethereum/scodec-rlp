@@ -20,7 +20,7 @@ case class EvmExecution private (program: EvmProgram, pc: Int = 0)
   override def next(): EvmExecution = copy(pc = pc + op.size)
 
   override def jump(dest: Int): Try[EvmExecution] = Try(
-    if (op != JUMP || op != JUMPI) throw new IllegalStateException(s"jump on non-jump instruction ${op.name}")
+    if (op != JUMP || op != JUMPI) throw new IllegalStateException(s"jump attempted on non-jump instruction (op: ${op.name}, pc: $pc)")
     else if (program.jumpDests(dest)) copy(pc = dest)
     else throw new EvmException(s"invalid jump destination $dest")
   )
