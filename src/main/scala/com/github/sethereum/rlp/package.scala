@@ -3,6 +3,7 @@ package com.github.sethereum
 import java.lang.{Integer => javaInt, Long => javaLong}
 import java.nio.charset.Charset
 
+import scodec.Attempt.{Successful, Failure}
 import scodec.bits.BitVector
 import scodec.codecs._
 import scodec._

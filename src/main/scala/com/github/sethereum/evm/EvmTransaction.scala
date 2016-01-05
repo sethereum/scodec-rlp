@@ -25,7 +25,7 @@ sealed trait EvmTransaction {
 }
 
 object EvmTransaction {
-  
+
 }
 
 
