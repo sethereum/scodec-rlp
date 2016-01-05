@@ -6,12 +6,17 @@ import scodec.codecs._
 /**
  * RLP encoding header byte representation.
  *
- * The first byte of an RLP item is used to indicate the type of item represented.
+ * The first byte of an RLP item is used to contain the value or indicate the type of item represented.
+ * An item can be one of 5 types:
+ * - value
+ * - short string
+ * - long string
+ * - short list
+ * - long list
  *
  * @param header first parsed byte
  */
-case class RlpHeaderByte(header: Int) {
-  require(header >= 0 && header <= 0xff, f"invalid header byte 0x$header%02x")
+final class RlpHeaderByte private (val header: Int) extends AnyVal {
 
   def isValue       = (0x00 to 0x7f) contains header
   def isShortString = (0x80 to 0xb7) contains header
@@ -39,21 +44,26 @@ object RlpHeaderByte {
 
   val codec = uint8.xmap[RlpHeaderByte](RlpHeaderByte.apply, _.header)
 
+  def apply(header: Int): RlpHeaderByte = {
+    require(header >= 0 && header <= 0xff, f"invalid header byte 0x$header%02x")
+    new RlpHeaderByte(header)
+  }
+
   def apply(value: RlpString[_]): RlpHeaderByte = {
     val bytes = value.bits.bytes
     val length = bytes.length
     val first = if (length == 1) Some(uint8.decode(value.bits).require.value) else None
 
-    first.filter(_ <= 0x7f).map(RlpHeaderByte.apply)                 // Single byte string
+    first.filter(_ <= 0x7f).map(RlpHeaderByte.apply)                // Value (single byte string)
       .getOrElse { length match {
-        case l if l <= 55 => RlpHeaderByte(0x80 + l)                 // Short string
-        case l => RlpHeaderByte(0xb7 + leftTrimmedBytesLength(l))    // Long string
+        case l if l < 56 => RlpHeaderByte(0x80 + l)                 // Short string
+        case l => RlpHeaderByte(0xb7 + leftTrimmedBytesLength(l))   // Long string
       }}
   }
 
   def apply(list: RlpList[_]): RlpHeaderByte = list.length match {
-    case l if l <= 55 => RlpHeaderByte(0xc0 + l.toInt)
-    case l => RlpHeaderByte(0xf7 + rlp.leftTrimmedBytesLength(l))
+    case l if l < 56 => RlpHeaderByte(0xc0 + l.toInt)               // Short list
+    case l => RlpHeaderByte(0xf7 + rlp.leftTrimmedBytesLength(l))   // Long list
   }
 
   def apply(item: RlpItem): RlpHeaderByte = item match {

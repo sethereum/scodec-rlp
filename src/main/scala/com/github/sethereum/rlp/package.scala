@@ -3,10 +3,9 @@ package com.github.sethereum
 import java.lang.{Integer => javaInt, Long => javaLong}
 import java.nio.charset.Charset
 
-import scodec.Attempt.{Successful, Failure}
-import scodec.bits.BitVector
-import scodec.codecs._
 import scodec._
+import scodec.bits.{BitVector, ByteVector}
+import scodec.codecs._
 import shapeless._
 
 import scala.language.implicitConversions
@@ -16,6 +15,7 @@ import scala.reflect.ClassTag
  * Codec support for RLP encoding, as defined by the Ethereum project.
  *
  * See: https://github.com/ethereum/wiki/wiki/RLP
+ * See: http://gavwood.com/paper.pdf (Appendix B)
  */
 package object rlp {
 
@@ -26,9 +26,14 @@ package object rlp {
 
   implicit val rlpBool = integralRlpCodec[Boolean](s => bool(s.bits.length.toInt), RlpString.apply)
   implicit val rlpByte = integralRlpCodec[Byte](s => byte(s.bits.length.toInt), RlpString.apply)
-  implicit val rlpInt = integralRlpCodec[Int](s => LeftTrimmedIntCodec, RlpString.apply)
-  implicit val rlpShort = integralRlpCodec[Short](s => LeftTrimmedShortCodec, RlpString.apply)
-  implicit val rlpLong = integralRlpCodec[Long](s => LeftTrimmedLongCodec, RlpString.apply)
+  implicit val rlpShort = integralRlpCodec[Short](_ => LeftTrimmedShortCodec, RlpString.apply)
+  implicit val rlpInt = integralRlpCodec[Int](_ => LeftTrimmedIntCodec, RlpString.apply)
+  implicit val rlpLong = integralRlpCodec[Long](_ => LeftTrimmedLongCodec, RlpString.apply)
+
+  // BigInt codec
+  // Note that BigInts are already left trimmed
+  private val bigIntCodec: Codec[BigInt] = bytes.xmap(bytes => BigInt(bytes.toArray), x => ByteVector(x.toByteArray))
+  implicit val rlpBigInt = integralRlpCodec[BigInt](_ => bigIntCodec, RlpString.apply)
 
   implicit def rlpChar(implicit charset: Charset) = RlpCodec(RlpString.codec[Char].narrow[Char](
     s => string.decode(s.bits).map(_.value.charAt(0)),
@@ -39,7 +44,6 @@ package object rlp {
     s => string.decode(s.bits).map(_.value),
     s => RlpString.apply(BitVector(s.getBytes(charset)))
   ))
-
 
   // Array codec
 
@@ -56,7 +60,7 @@ package object rlp {
   }
 
   // Codec for heterogeneous lists (HList)
-  implicit def rlpList[H <: HList](codec: Codec[H]): Codec[H] = {
+  implicit def rlpHList[H <: HList](codec: Codec[H]): Codec[H] = {
 
     def encode(h: H) = for {
       length <- RlpList.codec.encode(RlpList(h.runtimeLength))
