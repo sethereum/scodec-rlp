@@ -33,15 +33,13 @@ package object rlp {
     s => ByteVector(s.getBytes(charset)))
   )
 
-  // List codecs
+  // List codec
 
   implicit def rlpList[A](implicit itemsCodec: RlpCodec[A]): RlpCodec[List[A]] = new RlpListCodec[A](itemsCodec)
 
-  implicit def rlpStruct[A](codec: Codec[A]): RlpCodec[A] = new RlpStructCodec[A](codec)
+  // RLP structure codec (wrap existing codec in a list)
 
-  // Implicit conversion
-
-//  implicit def rlpCodec[A](codec: Codec[A]): RlpCodec[A] = RlpCodec(codec)
+  def rlpStruct[A](codec: Codec[A]): RlpCodec[A] = new RlpStructCodec[A](codec)
 
   // Ethereum-specific data type definitions
 

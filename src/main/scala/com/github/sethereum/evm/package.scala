@@ -129,6 +129,5 @@ package object evm {
 
   case class Sample(p256a: P256a, b256: B256)
 
-  implicit val sample: RlpCodec[Sample] = (P256a.rlp :: B256.rlp).as[Sample]
-//  implicit val sample: RlpCodec[Sample] = rlpStruct((P256a.rlp :: B256.rlp).as[Sample])
+  implicit val sample: RlpCodec[Sample] = rlpStruct((P256a.rlp :: B256.rlp).as[Sample])
 }
