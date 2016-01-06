@@ -1,26 +1,26 @@
 package com.github.sethereum.rlp
 
 import scodec.Attempt.{Failure, Successful}
-import scodec.bits.BitVector
 import scodec._
+import scodec.bits.BitVector
 import scodec.codecs._
 
 /**
  * Encodes/decodes bytes or list length
  * 
- * @param base length value base
+ * @param offset length value base
  */
-private [rlp] sealed abstract class RlpLengthCodec(val base: Int) extends Codec[Long]{
+private [rlp] sealed abstract class RlpLengthCodec(val offset: Int) extends Codec[Long]{
 
   override def sizeBound: SizeBound = SizeBound.bounded(1, 9) * 8
 
   override def encode(value: Long): Attempt[BitVector] = {
     if (value < 56) {
-      uint8.encode(base + value.toInt)
+      uint8.encode(offset + value.toInt)
     } else {
       for {
-        len <- vlong.encode(value)
-        header <- uint8.encode(base + 56 - 1 + len.bytes.length)
+        len <- ulong(leftTrimmedBytesLength(value) * 8).encode(value)
+        header <- uint8.encode(offset + 56 - 1 + len.bytes.length)
       } yield header ++ len
     }
   }
@@ -29,12 +29,12 @@ private [rlp] sealed abstract class RlpLengthCodec(val base: Int) extends Codec[
     for {
       header <- uint8.decode(bits)
       len <-
-        if (header.value < base) {
-          Failure(Err(s"invalid RLP length header ${header.value} for base $base"))
-        } else if (header.value < (base + 56)) {
-          Successful(header.map(_.toLong - base))
+        if (header.value < offset) {
+          Failure(Err(s"invalid RLP length header ${header.value} for base $offset"))
+        } else if (header.value < (offset + 56)) {
+          Successful(header.map(_.toLong - offset))
         } else {
-          ulong((header.value - base - 56 + 1) * 8).decode(header.remainder)
+          ulong((header.value - offset - 56 + 1) * 8).decode(header.remainder)
         }
     } yield len
   }

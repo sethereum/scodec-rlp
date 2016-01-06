@@ -1,9 +1,8 @@
 package com.github.sethereum.rlp
 
-import scodec.Attempt.{Successful, Failure}
+import scodec._
 import scodec.bits.BitVector
 import scodec.codecs._
-import scodec._
 
 class RlpListCodec[A](val itemCodec: RlpCodec[A]) extends RlpCodec[List[A]] {
 
@@ -13,7 +12,7 @@ class RlpListCodec[A](val itemCodec: RlpCodec[A]) extends RlpCodec[List[A]] {
 
   override def encode(value: List[A]): Attempt[BitVector] = {
     for {
-      data <- list(itemCodec).encode(value)
+      data <- listCodec.encode(value)
       len <- RlpListLengthCodec.encode(data.bytes.length)
     } yield len ++ data
   }

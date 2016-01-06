@@ -1,7 +1,7 @@
 package com.github.sethereum.rlp
 
 import scodec.bits.BitVector
-import scodec.{DecodeResult, Attempt, SizeBound, Codec}
+import scodec.{Attempt, Codec, DecodeResult, SizeBound}
 
 /**
  * Marker trait used to indicate codecs that encode/decode data using RLP encoding.

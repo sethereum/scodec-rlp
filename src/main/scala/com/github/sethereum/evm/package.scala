@@ -2,6 +2,9 @@ package com.github.sethereum
 
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.KeccakDigest
+import rlp._
+
+import scala.language.implicitConversions
 
 package object evm {
 
@@ -71,4 +74,61 @@ package object evm {
     out
   }
 
+
+  abstract class PositiveScalarCompanion[A : Integral, P <: AnyVal](val bits: Int) {
+    val MaxValue: A
+    def apply(i: A): P
+    implicit val rlp: RlpCodec[P]
+    implicit def pToIntegral(p: P): A
+  }
+
+  abstract class ByteSequenceCompanion[B](val size: Int) {
+    def validate(b: Array[Byte]): Unit = {
+      require(b.length == size, s"invalid byte array size (required: $size, actual: ${b.length})")
+    }
+    implicit val rlp: RlpCodec[B]
+    implicit def bToBytes(b: B): Array[Byte]
+    def apply(bytes: Array[Byte]): B
+  }
+
+  class P5a private (val i: Int) extends AnyVal
+
+  object P5a extends PositiveScalarCompanion[Int, P5a](5) {
+    val MaxValue = (1 << bits) - 1
+    override implicit val rlp = RlpCodec(rlpInt(bits).xmap[P5a](P5a.apply, _.i))
+    override implicit def pToIntegral(p5: P5a) = p5.i
+    def apply(i: Int): P5a = {
+      require(i <= MaxValue, s"value $i greater than maximum $MaxValue")
+      new P5a(i)
+    }
+  }
+  
+  class P256a private (val i: BigInt) extends AnyVal
+
+  object P256a extends PositiveScalarCompanion[BigInt, P256a](256) {
+    val MaxValue = (BigInt(1) << bits) - 1
+    override implicit val rlp = RlpCodec(rlpBigInt(bits).xmap[P256a](P256a.apply, _.i))
+    override implicit def pToIntegral(p256: P256a) = p256.i
+    def apply(i: BigInt): P256a = {
+      require(i <= MaxValue, s"value $i greater than maximum $MaxValue")
+      new P256a(i)
+    }
+  }
+
+  class B256 private (val bytes: Array[Byte]) extends AnyVal
+
+  object B256 extends ByteSequenceCompanion[B256](256) {
+    override implicit val rlp: RlpCodec[B256] = RlpCodec(rlpBytes(size).xmap[B256](B256.apply, _.bytes))
+    override implicit def bToBytes(b: B256): Array[Byte] = b.bytes
+    override def apply(bytes: Array[Byte]): B256 = {
+      validate(bytes)
+      new B256(bytes)
+    }
+  }
+
+
+  case class Sample(p256a: P256a, b256: B256)
+
+  implicit val sample: RlpCodec[Sample] = (P256a.rlp :: B256.rlp).as[Sample]
+//  implicit val sample: RlpCodec[Sample] = rlpStruct((P256a.rlp :: B256.rlp).as[Sample])
 }

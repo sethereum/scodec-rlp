@@ -6,7 +6,6 @@ import java.nio.charset.Charset
 import scodec._
 import scodec.bits.ByteVector
 import scodec.codecs._
-import shapeless._
 
 import scala.language.implicitConversions
 
@@ -21,7 +20,7 @@ package object rlp {
 
   // Basic data type codecs
 
-  val rlpBytes = RlpCodec(RlpBytesCodec.xmap[Array[Byte]](_.toArray, ByteVector.apply))
+  implicit val rlpBytes = RlpCodec(RlpBytesCodec.xmap[Array[Byte]](_.toArray, ByteVector.apply))
   def rlpBytes(bytes: Int) = new RlpFixedSizeBytesCodec(bytes).xmap[Array[Byte]](_.toArray, ByteVector.apply)
 
   def rlpShort(bits: Int) = new RlpShortCodec(bits)
@@ -36,9 +35,13 @@ package object rlp {
 
   // List codecs
 
-  implicit def rlpList[A](implicit itemCodec: RlpCodec[A]) = new RlpListCodec[A](itemCodec)
+  implicit def rlpList[A](implicit itemsCodec: RlpCodec[A]): RlpCodec[List[A]] = new RlpListCodec[A](itemsCodec)
 
-  implicit def rlpHList[H <: HList](codec: Codec[H]): RlpCodec[H] = new RlpHListCodec[H](codec)
+  implicit def rlpStruct[A](codec: Codec[A]): RlpCodec[A] = new RlpStructCodec[A](codec)
+
+  // Implicit conversion
+
+//  implicit def rlpCodec[A](codec: Codec[A]): RlpCodec[A] = RlpCodec(codec)
 
   // Ethereum-specific data type definitions
 

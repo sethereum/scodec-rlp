@@ -2,7 +2,6 @@ package com.github.sethereum.rlp
 
 import java.lang.{Integer => javaInt, Long => javaLong, Short => javaShort}
 
-import com.github.sethereum.rlp
 import scodec.bits.BitVector
 import scodec.codecs._
 import scodec.{Attempt, Codec, DecodeResult, SizeBound}

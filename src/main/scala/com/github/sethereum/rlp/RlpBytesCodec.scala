@@ -1,9 +1,9 @@
 package com.github.sethereum.rlp
 
 import scodec.Attempt.{Failure, Successful}
-import scodec.bits.{ByteVector, BitVector}
+import scodec.bits.{BitVector, ByteVector}
 import scodec.codecs._
-import scodec.{Err, DecodeResult, Attempt, SizeBound}
+import scodec.{Attempt, DecodeResult, Err, SizeBound}
 
 /**
  * Encodes/decodes a byte sequence using RLP encoding.

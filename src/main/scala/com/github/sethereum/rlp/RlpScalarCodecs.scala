@@ -43,17 +43,17 @@ object RlpScalarBytesCodec extends RlpCodec[ByteVector] {
 class RlpBigIntCodec(val bits: Int) extends RlpCodec[BigInt] {
   require(bits > 0, s"bits must be positive")
 
-  val Limit = BigInt(1) << bits
+  val MaxValue = (BigInt(1) << bits) - 1
 
   override def sizeBound: SizeBound = SizeBound.bounded(8, bits)
 
   override def encode(value: BigInt): Attempt[BitVector] = {
     value.signum match {
-      case -1 => Failure(Err(s"encoding negative scalar values is not supported (value: $value)"))
+      case -1 => Failure(Err(s"negative scalar values are not supported (value: $value)"))
       case 0 => uint8.encode(0)
       case 1 => {
-        if (value >= Limit) {
-          Failure(Err(s"value of of range (value: $value, limit: $Limit)"))
+        if (value > MaxValue) {
+          Failure(Err(s"value out of range (value: $value, max: $MaxValue)"))
         } else if (value < 128) {
           uint8.encode(value.intValue())
         } else {
@@ -66,8 +66,20 @@ class RlpBigIntCodec(val bits: Int) extends RlpCodec[BigInt] {
     }
   }
 
-  override def decode(bits: BitVector): Attempt[DecodeResult[BigInt]] =
-    RlpScalarBytesCodec.decode(bits).map(_.map(b => BigInt(1, b.toArray)))
+  override def decode(bits: BitVector): Attempt[DecodeResult[BigInt]] = {
+    for {
+      bytes <- RlpScalarBytesCodec.decode(bits)
+      value = BigInt(1, bytes.value.toArray)
+      validated <-
+        if (value.signum == -1) {
+          Failure(Err(s"negative scalar values are not supported (value: $value)"))
+        } else if (value > MaxValue) {
+          Failure(Err(s"value out of range (value: $value, max: $MaxValue)"))
+        } else {
+          Successful(bytes.map(_ => value))
+        }
+    } yield validated
+  }
 
 }
 
@@ -88,12 +100,14 @@ private [rlp] abstract class RlpIntegralCodec[A : Integral] extends RlpCodec[A] 
 
   override def toString: String = description
 
-  override def encode(value: A): Attempt[BitVector] = validate(value) flatMap { value =>
-    if (integral.lt(value, SingleByteValue)) {
-      // Shortcut common case
-      uint8.encode(integral.toInt(value))
-    } else {
-      codec.encode(value).flatMap(b => RlpScalarBytesCodec.encode(b.bytes))
+  override def encode(value: A): Attempt[BitVector] = {
+    validate(value) flatMap { value =>
+      if (integral.lt(value, SingleByteValue)) {
+        // Shortcut common case
+        uint8.encode(integral.toInt(value))
+      } else {
+        codec.encode(value).flatMap(b => RlpScalarBytesCodec.encode(b.bytes))
+      }
     }
   }
 
@@ -107,7 +121,7 @@ private [rlp] abstract class RlpIntegralCodec[A : Integral] extends RlpCodec[A] 
 
   def validate(value: A): Attempt[A] = {
     if (integral.signum(value) == -1) {
-      Failure(Err(s"encoding negative scalar values is not supported (value: $value)"))
+      Failure(Err(s"negative scalar values are not supported (value: $value)"))
     } else if (integral.compare(value, MaxValue) > 0) {
       Failure(Err(s"$value is greater than maximum value $MaxValue for $description"))
     } else {
