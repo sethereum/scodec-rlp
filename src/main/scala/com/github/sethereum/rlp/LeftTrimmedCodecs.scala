@@ -10,6 +10,8 @@ import scodec.{Attempt, Codec, DecodeResult, SizeBound}
 /**
  * Trims leading zeros during encoding.
  *
+ * Note that the standard scodec variable length codecs (vlong and vint) will NOT work.
+ *
  * Must be wrapped with a variable length codec (since the resulting bit vector will be value dependent).
  */
 private [rlp] object LeftTrimmedShortCodec extends Codec[Short] {
@@ -24,6 +26,8 @@ private [rlp] object LeftTrimmedShortCodec extends Codec[Short] {
 
 /**
  * Trims leading zeros during encoding.
+ *
+ * Note that the standard scodec variable length codecs (vlong and vint) will NOT work.
  *
  * Must be wrapped with a variable length codec (since the resulting bit vector will be value dependent).
  */
@@ -40,6 +44,8 @@ private [rlp] object LeftTrimmedIntCodec extends Codec[Int] {
 /**
  * Trims leading zeros during encoding.
  *
+ * Note that the standard scodec variable length codecs (vlong and vint) will NOT work.
+ *
  * Must be wrapped with a variable length codec (since the resulting bit vector will be value dependent).
  */
 private [rlp] object LeftTrimmedLongCodec extends Codec[Long] {
@@ -47,7 +53,7 @@ private [rlp] object LeftTrimmedLongCodec extends Codec[Long] {
   override def sizeBound: SizeBound = SizeBound.bounded(8, javaLong.SIZE)
 
   override def encode(value: Long): Attempt[BitVector] =
-    Attempt.successful(BitVector.fromLong(value, rlp.leftTrimmedBytesLength(value) * 8))
+    Attempt.successful(BitVector.fromLong(value, leftTrimmedBytesLength(value) * 8))
 
   override def decode(bits: BitVector): Attempt[DecodeResult[Long]] = ulong(bits.length.toInt).decode(bits)
 }
