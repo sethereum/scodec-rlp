@@ -8,6 +8,8 @@ import scodec._
 import scodec.bits.{BitVector, ByteVector}
 import scodec.codecs._
 
+import scala.math.Numeric._
+
 import scala.language.implicitConversions
 
 /**
@@ -79,6 +81,26 @@ package object rlp {
     }
   )
 
+  def rlist[A](itemCodec: RlpCodec[A]): RlpCodec[List[A]] = RlpCodec(
+    rlength(192).consume[List[A]] { _ match {
+      case Left(bad) => fail(Err(s"invalid RLP list header $bad"))
+      case Right(len) => fixedSizeBytes(len, list(itemCodec))
+    }} { b =>
+      Right(b.length)
+    }
+  )
+
+  def rscalar[A : Integral](codec: Codec[A], validateBytes: ValidationFunc[ByteVector], validateValue: ValidationFunc[A]): RlpCodec[A] = {
+    RlpCodec(rbytes.exmap[A](
+      { bytes => for {
+        b <- validateBytes(bytes)
+        d <- codec.decode(b.bits)
+        v <- validateValue(d.value)
+      } yield v },
+      i => validateValue(i).flatMap[ByteVector](i => codec.encode(i).map(_.bytes))
+    ))
+  }
+
   val rbytearray: RlpCodec[Array[Byte]] = RlpCodec(rbytes.xmap[Array[Byte]](_.toArray, ByteVector.apply))
 
   def rbytearray(size: Int): RlpCodec[Array[Byte]] = {
@@ -89,38 +111,9 @@ package object rlp {
     RlpCodec(rbytearray.exmap(validate _, validate _))
   }
 
-  val rscalarbytes: RlpCodec[ByteVector] = RlpCodec(rbytes.narrow(validateNoLeadingZeros, identity))
-
-  def rscalar[A : Integral](bits: Int, codec: Codec[A]): RlpCodec[A] = rscalar(Some(bits), codec)
-
-  def rscalar[A : Integral](tooLong: LengthValidator[A], codec: Codec[A]): RlpCodec[A] = {
-    RlpCodec(rscalarbytes.exmap[A](_ match {
-      case bytes @ tooLong(len, max) => Failure(Err(s"scalar byte array exceeds maximum length (len: $len, max: $max)"))
-      case bytes => codec.decode(bytes.bits) match {
-        case num @ negative() => Failure(Err(s"negative scalar value $num"))
-        //case num @ tooLong(len, max) => Failure(Err(s"value exceeds maximum bit length (bits: $bits, value: $i)"))
-      }},
-//      { bytes =>
-//        bits.flatMap { bits =>
-//          val maxBytes = ((bits + 7) / 8)
-//          if (bytes.length > maxBytes) {
-//            Some(Failure(Err(s"scalar byte array exceeds maximum length (max: $maxBytes, size: ${bytes.length})")))
-//          } else None
-//        } getOrElse {
-//          codec.decode(bytes.bits).flatMap(r => validatePositive(r.value))
-//        }
-//      },
-      i => validatePositive(i).flatMap[ByteVector](i => codec.encode(i).map(_.bytes))
-    ))
-  }
-
-  def rlist[A](itemCodec: RlpCodec[A]): RlpCodec[List[A]] = RlpCodec(
-    rlength(192).consume[List[A]] { _ match {
-      case Left(bad) => fail(Err(s"invalid RLP list header $bad"))
-      case Right(len) => fixedSizeBytes(len, list(itemCodec))
-    }} { b =>
-      Right(b.length)
-    }
+  def rstring(implicit charset: Charset): RlpCodec[String] = RlpCodec(rbytes.narrow[String](
+    s => string.decode(s.bits).map(_.value),
+    s => ByteVector(s.getBytes(charset)))
   )
 
   val ruint8: RlpCodec[Int] = RlpCodec(uint8.consume[Int] { h =>
@@ -133,72 +126,45 @@ package object rlp {
     else 129
   })
 
-  def validateNoLeadingZeros(a: ByteVector): Attempt[ByteVector] =
-    if (a.length > 1 && a(0) == 0) Failure(Err(s"invalid leading zero(s) $a"))
-    else Successful(a)
 
-  def validatePositive[A : Integral](i: A): Attempt[A] = {
-    val integral = implicitly[Integral[A]]
-    if (integral.lt(i, integral.zero)) Failure(Err(s"negative scalar value $i"))
-    else Successful(i)
-  }
+  // Validation functions
 
-  object negative {
-    def unapply[A](r: Attempt[DecodeResult[A]])(implicit integral: Integral[A]) =
-      r.toOption.map(r => integral.lt(r.value, integral.zero))
-  }
+  type ValidationFunc[A] = A => Attempt[A]
 
-  def test[A: Integral](validate: LengthValidator[A], i: A): Boolean = {
-    val bytes = ByteVector(0)
-    bytes match {
-      case validate() => false
-      case _ => true
+  implicit def lift[A](f: ValidationFunc[A]): Attempt[A] => Attempt[A] = (attempt: Attempt[A]) => attempt.flatMap(f)
+  implicit def liftDecodeResult[A](f: ValidationFunc[A]): Attempt[DecodeResult[A]] => Attempt[DecodeResult[A]] =
+    (attempt: Attempt[DecodeResult[A]]) => attempt.flatMap(r => f(r.value).map(_ => r))
+
+  private def pass[A](a: A) = Successful(a)
+
+  private def unlimited[A] = pass[A] _
+
+  private def validateScalarBytes(bits: Int): ByteVector => Attempt[ByteVector] = {
+    val max = (bits + 7) / 8
+    (bytes: ByteVector) => {
+      if (bytes.length > 1 && bytes(0) == 0) Failure(Err(s"scalar byte array contains leading zero(s) $bytes"))
+      else if (bytes.length > max) Failure(Err(s"scalar byte array exceeds maximum length (bits: $bits, max: $max, bytes: $bytes)"))
+      else Successful(bytes)
     }
   }
 
-  type ValidationFunc[A] = A => Either[Failure, A]
-
-  sealed abstract class LengthValidator[A : Integral](b: ValidationFunc[ByteVector], v: ValidationFunc[A]) {
-    def apply(bytes: ByteVector) = b(bytes)
-    def apply(value: A) = v(value)
+  private def validateRange[A](bits: Int, limit: A)(implicit integral: Integral[A]): A => Attempt[A] = {
+    import integral._
+    (value: A) => {
+      if (value < zero || value > limit) Failure(Err(s"scalar value negative or out of range (bits: $bits, value: $value"))
+      else Successful(value)
+    }
   }
 
-  def maxFailure[A](length: A => Int, max: Int, f: => Failure)(value: A) =
-    if (length(value) > max) Left(f) else Right(value)
+  private def validateNonNegative[A](implicit integral: Integral[A]): A => Attempt[A] = {
+    import integral._
+    (value: A) => {
+      if (value < zero) Failure(Err(s"negative scalar value $value"))
+      else Successful(value)
+    }
+  }
 
-  def sizeGreaterThanBytes(bits: Int)(bytes: ByteVector) = maxOption(bytes.length, ((bits + 7) / 8))
-
-  Failure(Err(s"scalar byte array exceeds maximum length (len: $len, max: $max)"))
-
-  def unlimitedLength[A : Integral] = new LengthValidator[A](_ => None, _ => None) {}
-
-  def invalidBigInt(bits: Int) = new LengthValidator[BigInt](sizeGreaterThanBytes(bits), i => maxOption(i.bitLength, bits - 1)) {}
-
-  def invalidInt(bits: Int) = new LengthValidator[Int](sizeGreaterThanBytes(bits), i => maxOption(javaInt.highestOneBit(i), bits - 1)) {}
-
-  def invalidLong(bits: Int) = new LengthValidator[Long](sizeGreaterThanBytes(bits), i => maxOption(javaLong.highestOneBit(i), bits - 1)) {}
-
-
-  def validateBigIntLength(bits: Int)(i: BigInt): Attempt[BigInt] =
-    if (i.bitLength < bits) Successful(i)
-    else Failure(Err(s"value exceeds maximum bit length (bits: $bits, value: $i)"))
-
-  def validateIntLength(bits: Int)(i: Int): Attempt[Int] =
-    if (javaInt.highestOneBit(i) < bits) Successful(i)
-    else Failure(Err(s"value exceeds maximum bit length (bits: $bits, value: $i)"))
-
-  def validateLongLength(bits: Long)(i: Long): Attempt[Long] =
-    if (javaLong.highestOneBit(i) < bits) Successful(i)
-    else Failure(Err(s"value exceeds maximum bit length (bits: $bits, value: $i)"))
-
-  def ruint32: RlpCodec[Long] = rscalar(32, uint32)
-
-  def ruint(bits: Int): RlpCodec[Int] =
-    rscalar(bits, uint(bits).exmap[Int](validateIntLength(bits), validateIntLength(bits)))
-
-  def rulong(bits: Int): RlpCodec[Long] =
-    rscalar(bits, ulong(bits).exmap[Long](validateLongLength(bits), validateLongLength(bits)))
-
+  // Raw BigInt codec
   private val bigint = Codec[BigInt](
     { i: BigInt =>
       val bytes = i.toByteArray
@@ -208,11 +174,17 @@ package object rlp {
     { bits: BitVector => bytes.decode(bits).map(_.map(v => BigInt(1, v.toArray))) }
   )
 
-  private
+  def ruint32: RlpCodec[Long] = rscalar(uint32, validateScalarBytes(javaInt.SIZE), validateRange(javaInt.SIZE, (1 << javaInt.SIZE) - 1))
 
-  val rbigint: RlpCodec[BigInt] = rscalar(None, bigint)
+  def ruint(bits: Int): RlpCodec[Int] =
+    rscalar(uint(bits), validateScalarBytes(bits), validateRange(bits, (1 << bits) - 1))
+
+  def rulong(bits: Int): RlpCodec[Long] =
+    rscalar(ulong(bits), validateScalarBytes(bits), validateRange(bits, (1L << bits) - 1))
+
+  val rbigint: RlpCodec[BigInt] = rscalar(bigint, unlimited, validateNonNegative _)
 
   def rbigint(bits: Int): RlpCodec[BigInt] =
-    rscalar(bits, bigint.exmap[BigInt](validateBigIntLength(bits), validateBigIntLength(bits)))
+    rscalar(bigint, validateScalarBytes(bits), validateRange(bits, (BigInt(1) << bits) - 1))
 
 }
