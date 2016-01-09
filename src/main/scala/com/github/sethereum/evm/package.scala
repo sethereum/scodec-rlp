@@ -95,7 +95,7 @@ package object evm {
 
   object P5a extends PositiveScalarCompanion[Int, P5a](5) {
     val MaxValue = (1 << bits) - 1
-    override implicit val rlp = RlpCodec(rlpInt(bits).xmap[P5a](P5a.apply, _.i))
+    override implicit val rlp = RlpCodec(ruint(bits).xmap[P5a](P5a.apply, _.i))
     override implicit def pToIntegral(p5: P5a) = p5.i
     def apply(i: Int): P5a = {
       require(i <= MaxValue, s"value $i greater than maximum $MaxValue")
@@ -107,7 +107,7 @@ package object evm {
 
   object P256a extends PositiveScalarCompanion[BigInt, P256a](256) {
     val MaxValue = (BigInt(1) << bits) - 1
-    override implicit val rlp = RlpCodec(rlpBigInt(bits).xmap[P256a](P256a.apply, _.i))
+    override implicit val rlp = RlpCodec(rbigint(bits).xmap[P256a](P256a.apply, _.i))
     override implicit def pToIntegral(p256: P256a) = p256.i
     def apply(i: BigInt): P256a = {
       require(i <= MaxValue, s"value $i greater than maximum $MaxValue")
@@ -118,7 +118,7 @@ package object evm {
   class B256 private (val bytes: Array[Byte]) extends AnyVal
 
   object B256 extends ByteSequenceCompanion[B256](256) {
-    override implicit val rlp: RlpCodec[B256] = RlpCodec(rlpBytes(size).xmap[B256](B256.apply, _.bytes))
+    override implicit val rlp: RlpCodec[B256] = RlpCodec(rbytearray(size).xmap[B256](B256.apply, _.bytes))
     override implicit def bToBytes(b: B256): Array[Byte] = b.bytes
     override def apply(bytes: Array[Byte]): B256 = {
       validate(bytes)
@@ -129,5 +129,5 @@ package object evm {
 
   case class Sample(p256a: P256a, b256: B256)
 
-  implicit val sample: RlpCodec[Sample] = rlpStruct((P256a.rlp :: B256.rlp).as[Sample])
+  implicit val sample: RlpCodec[Sample] = rstruct((P256a.rlp :: B256.rlp).as[Sample])
 }

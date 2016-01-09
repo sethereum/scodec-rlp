@@ -11,7 +11,7 @@ import scodec.{Attempt, Codec, DecodeResult, SizeBound}
  *
  * @tparam A
  */
-trait RlpCodec[A] extends Codec[A]
+sealed trait RlpCodec[A] extends Codec[A]
 
 object RlpCodec {
 
