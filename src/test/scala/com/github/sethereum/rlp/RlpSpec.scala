@@ -92,6 +92,10 @@ class RlpSpec extends WordSpec with Matchers {
       codec.decode(bits).flatMap(r => codec.encode(r.value)) shouldBe Attempt.successful(bits)
     }
 
+  }
+
+  "RLP struct codec" should {
+
     "roundtrip a short HList" in {
       val bits = BitVector(0xc4, 0x00, 0x01, 0x81, 0x85)
       val expected = 0 :: 1 :: 0x85 :: HNil
