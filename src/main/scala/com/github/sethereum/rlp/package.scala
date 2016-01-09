@@ -20,6 +20,31 @@ import scala.math.Numeric._
  */
 package object rlp {
 
+  /**
+   * Marker trait used to indicate codecs that encode/decode data using RLP encoding.
+   *
+   * This trait is used to help enforce type safe RLP codec construction.
+   * Use the RlpCodec companion object for wrapping over an existing codec (that encodes in RLP!).
+   *
+   * @tparam A
+   */
+  sealed trait RlpCodec[A] extends Codec[A]
+
+  object RlpCodec {
+
+    // Wraps a normal codec
+    def apply[A](codec: Codec[A]): RlpCodec[A] = codec match {
+      case c: RlpCodec[A] => c
+      case c => new RlpCodec[A] {
+        val codec = c
+        override def sizeBound: SizeBound = codec.sizeBound
+        override def decode(bits: BitVector): Attempt[DecodeResult[A]] = codec.decode(bits)
+        override def encode(value: A): Attempt[BitVector] = codec.encode(value)
+      }
+    }
+
+  }
+
   // Supporting functions and codecs
 
   /**
@@ -39,18 +64,20 @@ package object rlp {
   }}
 
   /**
-   * Narrows a Long length to an Int.
+   * Narrows a Long length to an Int for use in standard APIs (arrays and such that all take an Int size).
+   *
+   * Note that the maximum length is 31 bits since Ints are signed.
    */
-  private def rlength32(offset: Int): Codec[Either[Int, Int]] =
+  private def rlength31(offset: Int): Codec[Either[Int, Int]] =
     rlength(offset).narrow[Either[Int, Int]](_ match {
       case Left(v) => Successful(Left(v))
       case Right(len) if (len.isValidInt) => Successful(Right(len.toInt))
       case Right(len) => Failure(Err(s"length out of range (length: $len)"))
     }, _.right.map(_.toLong))
 
-  private val rbyteslength = rlength32(128)
+  private val rbyteslength = rlength31(128)
 
-  private val rlistlength = rlength32(192).narrow[Int](_ match {
+  private val rlistlength = rlength31(192).narrow[Int](_ match {
       case Left(bad) => Failure(Err(s"invalid RLP list header $bad"))
       case Right(len) => Successful(len)
     }, Right.apply)
@@ -70,6 +97,7 @@ package object rlp {
   private def scalarLength(value: Int) = math.max(javaInt.SIZE - javaInt.numberOfLeadingZeros(value), 8) / 8
   private def scalarLength(value: Long) = math.max(javaLong.SIZE - javaLong.numberOfLeadingZeros(value), 8) / 8
 
+  // Codec cache to avoid scalar codec instantiation
   private val intCodecs = (1 to javaInt.BYTES - 1).map(n => uint(n * 8)).toArray
   private val longCodecs = (1 to javaLong.BYTES - 1).map(n => ulong(n * 8)).toArray
 
@@ -132,9 +160,15 @@ package object rlp {
   }
 
   private def validateBits(bits: Int, max: Int) = {
-    require(bits > 0 && bits <= max, "bits must be in range [1, $max] for unsigned RLP integer")
+    require(bits > 0 && bits <= max, "bits must be in range [1, $max] for RLP integer (bits: $bits)")
   }
 
+
+  // ======================================================
+  // RLP Codecs
+  // ======================================================
+
+  // ------------------------------------------------------
   // Scalar codecs
 
   // Shortcut single byte encoding
@@ -165,6 +199,7 @@ package object rlp {
   def rbigint(bits: Int): RlpCodec[BigInt] =
     rscalar(_ => bigint, _ => bigint, validateScalarBytes(bits), validateRange(bits, (BigInt(1) << bits) - 1))
 
+  // ------------------------------------------------------
   // Array and String codecs
 
   val rbytearray: RlpCodec[Array[Byte]] = RlpCodec(rbytes.xmap[Array[Byte]](_.toArray, ByteVector.apply))
@@ -182,7 +217,8 @@ package object rlp {
     s => ByteVector(s.getBytes(charset)))
   )
 
-  // List codec
+  // ------------------------------------------------------
+  // List and structure codecs
 
   def rlist[A](itemCodec: RlpCodec[A]): RlpCodec[List[A]] = RlpCodec(variableSizeBytes(rlistlength, list(itemCodec)))
 
