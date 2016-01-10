@@ -120,11 +120,17 @@ package object evm {
   }
   val evmDifficulty = rlpCodec(p.xmap[EvmDifficulty](EvmDifficulty.apply, _.value))
 
-  case class EvmBlockNum(val value: P) extends AnyVal
-  object EvmBlockNum {
-    val Zero = EvmBlockNum(0)
+  case class EvmNumber(val value: P) extends AnyVal
+  object EvmNumber {
+    val Zero = EvmNumber(0)
   }
-  val evmBlockNum = rlpCodec(p.xmap[EvmBlockNum](EvmBlockNum.apply, _.value))
+  val evmNumber = rlpCodec(p.xmap[EvmNumber](EvmNumber.apply, _.value))
+
+  case class EvmPrice(val value: P) extends AnyVal
+  object EvmPrice {
+    val Zero = EvmPrice(0)
+  }
+  val evmPrice = rlpCodec(p.xmap[EvmPrice](EvmPrice.apply, _.value))
 
   case class EvmGas(val value: P) extends AnyVal
   object EvmGas {
@@ -140,6 +146,14 @@ package object evm {
   }
   val evmBloom = rlpCodec(b256.xmap[EvmBloom](EvmBloom.apply, _.value))
 
+  class EvmRecoveryId private (val value: P5) extends AnyVal
+  object EvmRecoveryId {
+    def apply(value: P5): EvmRecoveryId = {
+      require(value == 27 || value == 28, s"invalid recovery id $value")
+      new EvmRecoveryId(value)
+    }
+  }
+  val evmRecoveryId = rlpCodec(p5.xmap[EvmRecoveryId](EvmRecoveryId.apply, _.value))
 
   /**
    * Ethereum byte sequence initializer factory.

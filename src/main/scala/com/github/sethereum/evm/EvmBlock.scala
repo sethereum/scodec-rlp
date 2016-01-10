@@ -18,7 +18,7 @@ object EvmBlock {
     receiptsRoot      : EvmHash       = EvmHash.Empty,
     logsBloom         : EvmBloom      = EvmBloom.Empty,
     difficulty        : EvmDifficulty = EvmDifficulty.Minimum,
-    number            : EvmBlockNum   = EvmBlockNum.Zero,
+    number            : EvmNumber   = EvmNumber.Zero,
     gasLimit          : EvmGas        = EvmGas.MinimumLimit,
     gasUsed           : EvmGas        = EvmGas.Zero,
     timestamp         : EvmTimestamp  = EvmTimestamp.now(),
@@ -36,7 +36,7 @@ object EvmBlock {
     ("receiptsRoot"       | evmHash       ) ::
     ("logsBloom"          | evmBloom      ) ::
     ("difficulty"         | evmDifficulty ) ::
-    ("number"             | evmBlockNum   ) ::
+    ("number"             | evmNumber   ) ::
     ("gasLimit"           | evmGas        ) ::
     ("gasUsed"            | evmGas        ) ::
     ("timestamp"          | evmTimestamp  ) ::

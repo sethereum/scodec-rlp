@@ -70,8 +70,8 @@ object EvmWord {
     implicit def addressToWord(value: EvmTimestamp): EvmWord = EvmWord(value.value.toByteArray)
 
     // Block number
-    implicit def wordToBlockNum(word: EvmWord) = new EvmBlockNum(BigInt(word.bytes))
-    implicit def blockNumToWord(value: EvmBlockNum): EvmWord = EvmWord(value.value.toByteArray)
+    implicit def wordToBlockNum(word: EvmWord) = new EvmNumber(BigInt(word.bytes))
+    implicit def blockNumToWord(value: EvmNumber): EvmWord = EvmWord(value.value.toByteArray)
 
     // Difficulty
     implicit def wordToDifficulty(word: EvmWord) = new EvmDifficulty(BigInt(word.bytes))
