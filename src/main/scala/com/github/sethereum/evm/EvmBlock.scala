@@ -1,15 +1,48 @@
 package com.github.sethereum.evm
 
-import java.time.{LocalDateTime, ZoneOffset}
+import com.github.sethereum.evm.EvmBlock._
+import com.github.sethereum.rlp._
+import scodec.codecs._
 
 
-case class EvmBlock(header: EvmBlockHeader = EvmBlockHeader())
+case class EvmBlock(header: Header = Header())
 
-case class EvmBlockHeader(
-  coinbase: EvmAddress = EvmAddress.ZERO,
-  timestamp: EvmTimestamp = LocalDateTime.now.toEpochSecond(ZoneOffset.UTC),
-  number: Long = 1,
-  difficulty: Long = MinimumDifficulty,
-  gasLimit: Long = MiniumGasLimit
+object EvmBlock {
+
+  case class Header(
+    parentHash        : EvmHash       = EvmHash.Empty,
+    ommersHash        : EvmHash       = EvmHash.Empty,
+    beneficiary       : EvmAddress    = EvmAddress.Zero,
+    stateRoot         : EvmHash       = EvmHash.Empty,
+    transactionsRoot  : EvmHash       = EvmHash.Empty,
+    receiptsRoot      : EvmHash       = EvmHash.Empty,
+    logsBloom         : EvmBloom      = EvmBloom.Empty,
+    difficulty        : EvmDifficulty = EvmDifficulty.Minimum,
+    number            : EvmBlockNum   = EvmBlockNum.Zero,
+    gasLimit          : EvmGas        = EvmGas.MinimumLimit,
+    gasUsed           : EvmGas        = EvmGas.Zero,
+    timestamp         : EvmTimestamp  = EvmTimestamp.now(),
+    extraData         : B_32          = Seq.empty,
+    mixHash           : EvmHash       = EvmHash.Empty,
+    nonce             : EvmNonce      = EvmNonce.Zero
   )
 
+  implicit val header: RlpCodec[Header] = rstruct({
+    ("parentHash"         | evmHash       ) ::
+    ("ommersHash"         | evmHash       ) ::
+    ("beneficiary"        | evmAddress    ) ::
+    ("stateRoot"          | evmHash       ) ::
+    ("transactionsRoot"   | evmHash       ) ::
+    ("receiptsRoot"       | evmHash       ) ::
+    ("logsBloom"          | evmBloom      ) ::
+    ("difficulty"         | evmDifficulty ) ::
+    ("number"             | evmBlockNum   ) ::
+    ("gasLimit"           | evmGas        ) ::
+    ("gasUsed"            | evmGas        ) ::
+    ("timestamp"          | evmTimestamp  ) ::
+    ("extraData"          | b_32          ) ::
+    ("mixHash"            | evmHash       ) ::
+    ("nonce"              | evmNonce      )
+  }.as[Header])
+
+}

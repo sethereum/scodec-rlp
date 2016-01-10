@@ -24,7 +24,7 @@ class RlpSpec extends WordSpec with Matchers {
         val bits = BitVector(b)
         val expected = bits.bytes.toArray
 
-        rbytearray.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
+        rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
       }
     }
 
@@ -32,7 +32,7 @@ class RlpSpec extends WordSpec with Matchers {
       val bits = BitVector(0x80)
       val expected = Array[Byte]()
 
-      rbytearray.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
+      rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
     }
 
     "decode single byte short array" in {
@@ -40,7 +40,7 @@ class RlpSpec extends WordSpec with Matchers {
         val bits = BitVector(0x80 + 1, b)
         val expected = bits.bytes.drop(1).toArray
 
-        rbytearray.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
+        rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
       }
     }
 
@@ -53,7 +53,7 @@ class RlpSpec extends WordSpec with Matchers {
         val bits = BitVector(Stream(header.toByte) ++ Stream.fill(len)(b.toByte))
         val expected = bits.bytes.drop(1).toArray
 
-        rbytearray.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
+        rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
       }
     }
 
@@ -67,7 +67,7 @@ class RlpSpec extends WordSpec with Matchers {
         val bits = BitVector(Iterator.single(header) ++ lenBytes.iterator ++ Iterator.fill(len)(b.toByte))
         val expected = bits.bytes.drop(1 + lenBytes.size).toArray
 
-        rbytearray.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
+        rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
       }
     }
 
@@ -79,8 +79,8 @@ class RlpSpec extends WordSpec with Matchers {
       val bits = BitVector(0xc0)
       val expected = List[Array[Byte]]()
 
-      rlist(rbytearray).decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
-      rlist(rbytearray).decode(bits).flatMap(r => rlist(rbytearray).encode(r.value)) shouldBe Attempt.successful(bits)
+      rlist(rbyteseq).decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
+      rlist(rbyteseq).decode(bits).flatMap(r => rlist(rbyteseq).encode(r.value)) shouldBe Attempt.successful(bits)
     }
 
     "roundtrip a short List" in {

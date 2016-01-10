@@ -7,7 +7,7 @@ class ByteSequenceSpec extends WordSpec with Matchers {
   "B256" should {
 
     "succeed on valid byte array" in {
-      val bytes: Array[Byte] = B256(Array.fill(256)(1.toByte))
+      val bytes: Seq[Byte] = B256(Seq.fill(256)(1.toByte))
       bytes.length shouldBe 256
       bytes.forall(_ == 1) shouldBe true
     }

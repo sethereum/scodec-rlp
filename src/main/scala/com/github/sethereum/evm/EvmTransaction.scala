@@ -10,18 +10,18 @@ sealed trait EvmTransaction {
   val r: B32
   val s: B32
 
-  requireNonce(nonce)
-  requireP256(gasPrice)
-  requireP256(gasLimit)
-  requireBalance(value)
+//  requireNonce(nonce)
+//  requireP256(gasPrice)
+//  requireP256(gasLimit)
+//  requireBalance(value)
   // Appendix F.206
   require(v >= 27 && v <= 28, s"Invalid ECDSASIGN recovery id $v")
-  requireB32(r)
-  requireB32(s)
+//  requireB32(r)
+//  requireB32(s)
 
   // TODO: Implement signature recovery function
   // See: https://forum.ethereum.org/discussion/2166/signature-generation-and-verification-in-solidity
-  lazy val sender: EvmAddress = EvmAddress.ZERO
+  lazy val sender: EvmAddress = EvmAddress.Zero
 }
 
 object EvmTransaction {

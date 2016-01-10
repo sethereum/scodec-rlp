@@ -202,14 +202,22 @@ package object rlp {
   // ------------------------------------------------------
   // Array and String codecs
 
-  val rbytearray: RlpCodec[Array[Byte]] = RlpCodec(rbytes.xmap[Array[Byte]](_.toArray, ByteVector.apply))
+  val rbyteseq: RlpCodec[Seq[Byte]] = RlpCodec(rbytes.xmap[Seq[Byte]](_.toSeq, ByteVector.apply))
 
-  def rbytearray(size: Int): RlpCodec[Array[Byte]] = {
-    def validate(a: Array[Byte]): Attempt[Array[Byte]] = {
+  def rbyteseq(size: Int): RlpCodec[Seq[Byte]] = {
+    def validate(a: Seq[Byte]): Attempt[Seq[Byte]] = {
       if (a.length != size) Failure(Err(s"invalid fixed size RLP byte array (expected: $size, actual: ${a.length}"))
       else Successful(a)
     }
-    RlpCodec(rbytearray.exmap(validate _, validate _))
+    RlpCodec(rbyteseq.exmap(validate _, validate _))
+  }
+
+  def rbyteseq(min: Int, max: Int): RlpCodec[Seq[Byte]] = {
+    def validate(a: Seq[Byte]): Attempt[Seq[Byte]] = {
+      if (a.length < min || a.length > max) Failure(Err(s"invalid variable size RLP byte array (expected: [$min, $max], actual: ${a.length}"))
+      else Successful(a)
+    }
+    RlpCodec(rbyteseq.exmap(validate _, validate _))
   }
 
   def rstring(implicit charset: Charset): RlpCodec[String] = RlpCodec(rbytes.narrow[String](
@@ -226,6 +234,6 @@ package object rlp {
 
   def rstruct[A](codec: Codec[A]): RlpCodec[A] = RlpCodec(variableSizeBytes(rlistlength, codec))
 
-  implicit def rhlist[H <: HList](codec: Codec[H]): RlpCodec[H] = rstruct(codec)
+  def rlpCodec[A](codec: Codec[A]): RlpCodec[A] = RlpCodec(codec)
 
 }

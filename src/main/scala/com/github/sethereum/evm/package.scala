@@ -1,8 +1,12 @@
 package com.github.sethereum
 
+import java.time.{LocalDateTime, ZoneOffset}
+
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.KeccakDigest
 import rlp._
+import scodec.Attempt.{Successful, Failure}
+import scodec.codecs._
 
 import scala.language.implicitConversions
 
@@ -28,41 +32,99 @@ package object evm {
   }
 
   type EvmValue = BigInt
-  type EvmTimestamp = Long
 
   // Basic data type definitions
-  type P5 = Byte
-  type P256 = BigInt    // Positive integer < 2^256
+
+  type B = Seq[Byte]
+  val b = rbyteseq
+
+  type B8 = Seq[Byte]
+  val B8 = B(8)
+  val b8 = rbyteseq(8)
+
+  type B20 = Seq[Byte]
+  val B20 = B(20)
+  val b20 = rbyteseq(20)
+
   type B32 = Seq[Byte]
+  val B32 = B(32)
+  val b32 = rbyteseq(32)
 
-  val P256UpperLimit = BigInt(1) << 256
-  
-  def requireP5(p5: P5) =
-    require(p5 > 0 && p5 < (1 << 5), s"invalid P5 value: $p5")
+  type B_32 = Seq[Byte]
+  val B_32 = B(0, 32)
+  val b_32 = rbyteseq(0, 32)
 
-  def requireP256(p256: P256) =
-    require(p256 > 0 && p256 < P256UpperLimit, s"invalid P256 value: $p256")
+  type B256 = Seq[Byte]
+  val B256 = B(256)
+  val b256 = rbyteseq(256)
 
-  def requireB32(b32: B32) =
-    require(b32.length == 32, s"invalid B32 length (expected: 32, actual: ${b32.length}")
+  type P = BigInt
+  val p = rbigint
 
+  type P5 = Int
+  val P5 = P(5, (1 << 5) - 1)
+  val p5 = ruint(5)
 
-  type EvmNonce = P256
-  val requireNonce = requireP256 _
-
-  type EvmBalance = P256
-  val requireBalance = requireP256 _
-
-  type EvmHash = B32
-  val requireHash = requireB32 _
-
-
-  // Block header constraints (see section 4.3.4)
-  val MinimumDifficulty = 131072
-  val MiniumGasLimit = 5000
+  type P256 = BigInt    // Positive integer < 2^256
+  val P256 = P(256, (BigInt(1) << 256) - 1)
+  val p256 = rbigint(256)
 
 
-  val EmptyKeccakDigest = keccakDigest(Seq.empty)
+  case class EvmAddress(val value: B20) extends AnyVal
+  object EvmAddress {
+    val Zero = EvmAddress(Seq.fill(20)(0.toByte))
+  }
+  val evmAddress = rlpCodec(b20.xmap[EvmAddress](EvmAddress.apply, _.value))
+
+  case class EvmTimestamp(val value: P256) extends AnyVal
+  object EvmTimestamp {
+    def now() = EvmTimestamp(LocalDateTime.now.toEpochSecond(ZoneOffset.UTC))
+  }
+  val evmTimestamp = rlpCodec(p256.xmap[EvmTimestamp](EvmTimestamp.apply, _.value))
+
+  case class EvmNonce(val value: B8) extends AnyVal
+  object EvmNonce {
+    val Zero = EvmNonce(Seq.fill(8)(0.toByte))
+  }
+  val evmNonce = rlpCodec(b8.xmap[EvmNonce](EvmNonce.apply, _.value))
+
+  case class EvmBalance(val value: P256) extends AnyVal
+  val evmBalance = p256
+
+  case class EvmHash(val value: B32) extends AnyVal
+  object EvmHash {
+    val Empty = EvmHash(keccakDigest(Seq.empty))
+  }
+  val evmHash = rlpCodec(b32.xmap[EvmHash](EvmHash.apply, _.value))
+
+  case class EvmDifficulty(val value: P) extends AnyVal
+  object EvmDifficulty {
+    // Block header constraints (see section 4.3.4)
+    val Minimum = EvmDifficulty(131072)
+  }
+  val evmDifficulty = rlpCodec(p.xmap[EvmDifficulty](EvmDifficulty.apply, _.value))
+
+  case class EvmBlockNum(val value: P) extends AnyVal
+  object EvmBlockNum {
+    val Zero = EvmBlockNum(0)
+  }
+  val evmBlockNum = rlpCodec(p.xmap[EvmBlockNum](EvmBlockNum.apply, _.value))
+
+  case class EvmGas(val value: P) extends AnyVal
+  object EvmGas {
+    val Zero = EvmGas(0)
+    // Block header constraints (see section 4.3.4)
+    val MinimumLimit = EvmGas(5000)
+  }
+  val evmGas = rlpCodec(p.xmap[EvmGas](EvmGas.apply, _.value))
+
+  case class EvmBloom(val value: B256) extends AnyVal
+  object EvmBloom {
+    val Empty = EvmBloom(Seq.fill(256)(0.toByte))
+  }
+  val evmBloom = rlpCodec(b256.xmap[EvmBloom](EvmBloom.apply, _.value))
+
+
 
   // TODO: Move this elsewhere
   def keccakDigest(bytes: Seq[Byte]): Seq[Byte] = {
@@ -74,60 +136,35 @@ package object evm {
     out
   }
 
-
-  abstract class PositiveScalarCompanion[A : Integral, P <: AnyVal](val bits: Int) {
-    val MaxValue: A
-    def apply(i: A): P
-    implicit val rlp: RlpCodec[P]
-    implicit def pToIntegral(p: P): A
-  }
-
-  abstract class ByteSequenceCompanion[B](val size: Int) {
-    def validate(b: Array[Byte]): Unit = {
-      require(b.length == size, s"invalid byte array size (required: $size, actual: ${b.length})")
-    }
-    implicit val rlp: RlpCodec[B]
-    implicit def bToBytes(b: B): Array[Byte]
-    def apply(bytes: Array[Byte]): B
-  }
-
-  class P5a private (val i: Int) extends AnyVal
-
-  object P5a extends PositiveScalarCompanion[Int, P5a](5) {
-    val MaxValue = (1 << bits) - 1
-    override implicit val rlp = RlpCodec(ruint(bits).xmap[P5a](P5a.apply, _.i))
-    override implicit def pToIntegral(p5: P5a) = p5.i
-    def apply(i: Int): P5a = {
-      require(i <= MaxValue, s"value $i greater than maximum $MaxValue")
-      new P5a(i)
-    }
-  }
-  
-  class P256a private (val i: BigInt) extends AnyVal
-
-  object P256a extends PositiveScalarCompanion[BigInt, P256a](256) {
-    val MaxValue = (BigInt(1) << bits) - 1
-    override implicit val rlp = RlpCodec(rbigint(bits).xmap[P256a](P256a.apply, _.i))
-    override implicit def pToIntegral(p256: P256a) = p256.i
-    def apply(i: BigInt): P256a = {
-      require(i <= MaxValue, s"value $i greater than maximum $MaxValue")
-      new P256a(i)
+  /**
+   * Ethereum byte sequence initializer factory.
+   *
+   * The returned function checks the supplied byte array and throws IllegalArgumentException on size mismatch.
+   *
+   * @param bytes expected byte array size
+   * @return a function that checks the size of the supplied byte array
+   */
+  def B(bytes: Int) = {
+    (value: Seq[Byte]) => {
+      require(value.length == bytes, s"byte array size mismatch (expected: $bytes, actual ${value.length})")
+      value
     }
   }
 
-  class B256 private (val bytes: Array[Byte]) extends AnyVal
+  def B(min: Int, max: Int) = {
+    (value: Seq[Byte]) => {
+      require(value.length < min || value.length > max, s"byte array size mismatch (expected: [$min, $max], actual ${value.length})")
+      value
+    }
+  }
 
-  object B256 extends ByteSequenceCompanion[B256](256) {
-    override implicit val rlp: RlpCodec[B256] = RlpCodec(rbytearray(size).xmap[B256](B256.apply, _.bytes))
-    override implicit def bToBytes(b: B256): Array[Byte] = b.bytes
-    override def apply(bytes: Array[Byte]): B256 = {
-      validate(bytes)
-      new B256(bytes)
+  def P[A](bits: Int, limit: A)(implicit integral: Integral[A]): A => A = {
+    import integral._
+    (value: A) => {
+      require(value >= zero && value <= limit, s"scalar value negative or out of range (bits: $bits, value: $value")
+      value
     }
   }
 
 
-  case class Sample(p256a: P256a, b256: B256)
-
-  implicit val sample: RlpCodec[Sample] = rstruct((P256a.rlp :: B256.rlp).as[Sample])
 }

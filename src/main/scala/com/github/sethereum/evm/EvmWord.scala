@@ -63,7 +63,23 @@ object EvmWord {
 
     // Address
     implicit def wordToAddress(word: EvmWord) = new EvmAddress(word.bytes)
-    implicit def addressToWord(value: EvmAddress): EvmWord = EvmWord(value.data)
+    implicit def addressToWord(value: EvmAddress): EvmWord = EvmWord(value.value)
+
+    // Timestamp
+    implicit def wordToTimestamp(word: EvmWord) = new EvmTimestamp(BigInt(word.bytes))
+    implicit def addressToWord(value: EvmTimestamp): EvmWord = EvmWord(value.value.toByteArray)
+
+    // Block number
+    implicit def wordToBlockNum(word: EvmWord) = new EvmBlockNum(BigInt(word.bytes))
+    implicit def blockNumToWord(value: EvmBlockNum): EvmWord = EvmWord(value.value.toByteArray)
+
+    // Difficulty
+    implicit def wordToDifficulty(word: EvmWord) = new EvmDifficulty(BigInt(word.bytes))
+    implicit def difficultyToWord(value: EvmDifficulty): EvmWord = EvmWord(value.value.toByteArray)
+
+    // Gas
+    implicit def wordToGas(word: EvmWord) = new EvmGas(BigInt(word.bytes))
+    implicit def gasToWord(value: EvmGas): EvmWord = EvmWord(value.value.toByteArray)
 
   }
 }

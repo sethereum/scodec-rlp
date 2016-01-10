@@ -217,7 +217,7 @@ object EvmOp {
     def codesize      = (state: EvmState) => { state.push(state.execution.program.code.size) }
     def codecopy      = (to: Int) => (from: Int) => (len: Int) => (state: EvmState) => { state.memStore(to, state.execution.program.code.slice(from, from + len).padTo(len, STOP.opcode.toByte)) }
 
-    def coinbase      = (state: EvmState) => { state.push(state.environment.block.header.coinbase) }
+    def coinbase      = (state: EvmState) => { state.push(state.environment.block.header.beneficiary) }
     def timestamp     = (state: EvmState) => { state.push(state.environment.block.header.timestamp) }
     def number        = (state: EvmState) => { state.push(state.environment.block.header.number) }
     def difficulty    = (state: EvmState) => { state.push(state.environment.block.header.difficulty) }
