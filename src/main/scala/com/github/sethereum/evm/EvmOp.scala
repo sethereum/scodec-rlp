@@ -203,9 +203,9 @@ object EvmOp {
     def or     = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x | y) }
     def xor    = (x: BigInt) => (y: BigInt)  => (state: EvmState) => { state.push(x ^ y) }
     def not    = (x: BigInt) =>                 (state: EvmState) => { state.push(~x) }
-    def byte   = (i: Int)    => (w: EvmWord) => (state: EvmState) => { state.push(if (i < EvmWord.BYTES) EvmWord(w.padLeft.bytes(i)) else EvmWord.ZERO) }
+    def byte   = (i: Int)    => (w: EvmWord) => (state: EvmState) => { state.push(if (i < EvmWord.BYTES) EvmWord(w.padLeft.bytes(i)) else EvmWord.Zero) }
 
-    def sha3   = (begin: Int) => (len: Int) => (state: EvmState) => { state.memSlice(begin, begin + len).flatMap { case (m, s) => s.push(EvmWord(keccakDigest(m))) } }
+    def sha3   = (begin: Int) => (len: Int) => (state: EvmState) => { state.memSlice(begin, begin + len).flatMap { case (m, s) => s.push(EvmHash.keccak256(m)) } }
 
     def address       = (state: EvmState) => { state.push(state.environment.address) }
     def origin        = (state: EvmState) => { state.push(state.environment.origin) }

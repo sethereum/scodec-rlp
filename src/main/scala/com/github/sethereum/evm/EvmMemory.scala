@@ -33,7 +33,7 @@ case class EvmMemory private (bytes: Seq[Byte] = Seq.empty, max: Int = 0) extend
     val end = begin + EvmWord.BYTES
 
     if (begin >= bytes.size) {
-      Try((EvmWord.ZERO, copy(max = Math.max(this.max, end))))
+      Try((EvmWord.Zero, copy(max = Math.max(this.max, end))))
     } else if (end <= bytes.size) {
       Try((EvmWord(bytes.slice(begin, end)), this))
     } else {

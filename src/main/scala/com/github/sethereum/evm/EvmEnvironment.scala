@@ -1,7 +1,5 @@
 package com.github.sethereum.evm
 
-import java.math.BigInteger
-
 case class EvmEnvironment(
   address: EvmAddress = EvmAddress.Zero,
   origin: EvmAddress = EvmAddress.Zero,
@@ -11,6 +9,6 @@ case class EvmEnvironment(
 
 case class EvmCall(
   caller: EvmAddress = EvmAddress.Zero,
-  callValue: EvmValue = BigInteger.ZERO,
+  callValue: EvmValue = EvmValue.Zero,
   callData: Seq[Byte] = Seq.empty
 )

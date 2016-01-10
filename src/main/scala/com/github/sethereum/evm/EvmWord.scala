@@ -18,13 +18,13 @@ final case class EvmWord (val data: Seq[Byte]) {
       EvmWord(padded)
     }
 
-  def zero: Boolean = (this eq EvmWord.ZERO) || data.forall(_ == 0)
+  def zero: Boolean = (this eq EvmWord.Zero) || data.forall(_ == 0)
 }
 
 object EvmWord {
   val SIZE = 256
   val BYTES = SIZE / 8
-  val ZERO = EvmWord(Seq.fill(BYTES)(0.toByte))
+  val Zero = EvmWord(Seq.fill(BYTES)(0.toByte))
 
   def apply(byte: Byte): EvmWord = new EvmWord(Seq(byte))
 
@@ -80,6 +80,14 @@ object EvmWord {
     // Gas
     implicit def wordToGas(word: EvmWord) = new EvmGas(BigInt(word.bytes))
     implicit def gasToWord(value: EvmGas): EvmWord = EvmWord(value.value.toByteArray)
+
+    // Hash
+    implicit def wordToHash(word: EvmWord) = new EvmHash(word.bytes)
+    implicit def hashToWord(value: EvmHash): EvmWord = EvmWord(value.value)
+
+    // Value
+    implicit def wordToValue(word: EvmWord) = new EvmValue(BigInt(word.bytes))
+    implicit def valueToWord(value: EvmValue): EvmWord = EvmWord(value.value.toByteArray)
 
   }
 }

@@ -2,11 +2,9 @@ package com.github.sethereum
 
 import java.time.{LocalDateTime, ZoneOffset}
 
+import com.github.sethereum.rlp._
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.KeccakDigest
-import rlp._
-import scodec.Attempt.{Successful, Failure}
-import scodec.codecs._
 
 import scala.language.implicitConversions
 
@@ -21,7 +19,7 @@ package object evm {
     type Key = EvmWord
     type Value = EvmWord
 
-    val empty = Map.empty[Key, Value].withDefaultValue(EvmWord.ZERO)
+    val empty = Map.empty[Key, Value].withDefaultValue(EvmWord.Zero)
 
     object Key {
       def apply(bytes: Array[Byte]): EvmStorage.Key = EvmWord(bytes)
@@ -31,9 +29,7 @@ package object evm {
     }
   }
 
-  type EvmValue = BigInt
-
-  // Basic data type definitions
+  // Generic data type definitions
 
   type B = Seq[Byte]
   val b = rbyteseq
@@ -70,11 +66,28 @@ package object evm {
   val p256 = rbigint(256)
 
 
+  // Evm type value classes
+
   case class EvmAddress(val value: B20) extends AnyVal
   object EvmAddress {
     val Zero = EvmAddress(Seq.fill(20)(0.toByte))
   }
   val evmAddress = rlpCodec(b20.xmap[EvmAddress](EvmAddress.apply, _.value))
+
+  case class EvmHash(val value: B32) extends AnyVal
+  object EvmHash {
+    val Empty = keccak256(Seq.empty)
+
+    def keccak256(bytes: Seq[Byte]): EvmHash = {
+      val digest: Digest = new KeccakDigest(256)
+      val out = Array.ofDim[Byte](32)
+
+      digest.update(bytes.toArray, 0, bytes.length)
+      digest.doFinal(out, 0)
+      EvmHash(out)
+    }
+  }
+  val evmHash = rlpCodec(b32.xmap[EvmHash](EvmHash.apply, _.value))
 
   case class EvmTimestamp(val value: P256) extends AnyVal
   object EvmTimestamp {
@@ -89,13 +102,16 @@ package object evm {
   val evmNonce = rlpCodec(b8.xmap[EvmNonce](EvmNonce.apply, _.value))
 
   case class EvmBalance(val value: P256) extends AnyVal
-  val evmBalance = p256
-
-  case class EvmHash(val value: B32) extends AnyVal
-  object EvmHash {
-    val Empty = EvmHash(keccakDigest(Seq.empty))
+  object EvmBalance {
+    val Zero = EvmBalance(0)
   }
-  val evmHash = rlpCodec(b32.xmap[EvmHash](EvmHash.apply, _.value))
+  val evmBalance = rlpCodec(p256.xmap[EvmBalance](EvmBalance.apply, _.value))
+
+  case class EvmValue(val value: P256) extends AnyVal
+  object EvmValue {
+    val Zero = EvmValue(0)
+  }
+  val evmValue = rlpCodec(p256.xmap[EvmValue](EvmValue.apply, _.value))
 
   case class EvmDifficulty(val value: P) extends AnyVal
   object EvmDifficulty {
@@ -124,17 +140,6 @@ package object evm {
   }
   val evmBloom = rlpCodec(b256.xmap[EvmBloom](EvmBloom.apply, _.value))
 
-
-
-  // TODO: Move this elsewhere
-  def keccakDigest(bytes: Seq[Byte]): Seq[Byte] = {
-    val digest: Digest = new KeccakDigest(256)
-    val out = Array.ofDim[Byte](256/8)
-
-    digest.update(bytes.toArray[Byte], 0, bytes.length)
-    digest.doFinal(out, 0)
-    out
-  }
 
   /**
    * Ethereum byte sequence initializer factory.

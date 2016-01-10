@@ -48,7 +48,7 @@ class EvmStateSpec extends WordSpec with EvmSpecBase {
   "EVM state storage" should {
 
     "retrieve ZERO for non-existent key" in {
-      EvmState().sget(hex"0011223344".toArray).success.value shouldBe EvmWord.ZERO
+      EvmState().sget(hex"0011223344".toArray).success.value shouldBe EvmWord.Zero
     }
 
     "store/retrieve" in {
