@@ -27,22 +27,4 @@ object EvmBlock {
     nonce             : EvmNonce      = EvmNonce.Zero
   )
 
-  implicit val header: RlpCodec[Header] = rstruct({
-    ("parentHash"         | evmHash       ) ::
-    ("ommersHash"         | evmHash       ) ::
-    ("beneficiary"        | evmAddress    ) ::
-    ("stateRoot"          | evmHash       ) ::
-    ("transactionsRoot"   | evmHash       ) ::
-    ("receiptsRoot"       | evmHash       ) ::
-    ("logsBloom"          | evmBloom      ) ::
-    ("difficulty"         | evmDifficulty ) ::
-    ("number"             | evmNumber   ) ::
-    ("gasLimit"           | evmGas        ) ::
-    ("gasUsed"            | evmGas        ) ::
-    ("timestamp"          | evmTimestamp  ) ::
-    ("extraData"          | b_32          ) ::
-    ("mixHash"            | evmHash       ) ::
-    ("nonce"              | evmNonce      )
-  }.as[Header])
-
 }

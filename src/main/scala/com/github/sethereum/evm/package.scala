@@ -6,6 +6,8 @@ import com.github.sethereum.rlp._
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.KeccakDigest
 
+import scodec.codecs._
+
 import scala.language.implicitConversions
 
 package object evm {
@@ -72,7 +74,6 @@ package object evm {
   object EvmAddress {
     val Zero = EvmAddress(Seq.fill(20)(0.toByte))
   }
-  val evmAddress = rlpCodec(b20.xmap[EvmAddress](EvmAddress.apply, _.value))
 
   case class EvmHash(val value: B32) extends AnyVal
   object EvmHash {
@@ -87,50 +88,42 @@ package object evm {
       EvmHash(out)
     }
   }
-  val evmHash = rlpCodec(b32.xmap[EvmHash](EvmHash.apply, _.value))
 
   case class EvmTimestamp(val value: P256) extends AnyVal
   object EvmTimestamp {
     def now() = EvmTimestamp(LocalDateTime.now.toEpochSecond(ZoneOffset.UTC))
   }
-  val evmTimestamp = rlpCodec(p256.xmap[EvmTimestamp](EvmTimestamp.apply, _.value))
 
   case class EvmNonce(val value: B8) extends AnyVal
   object EvmNonce {
     val Zero = EvmNonce(Seq.fill(8)(0.toByte))
   }
-  val evmNonce = rlpCodec(b8.xmap[EvmNonce](EvmNonce.apply, _.value))
 
   case class EvmBalance(val value: P256) extends AnyVal
   object EvmBalance {
     val Zero = EvmBalance(0)
   }
-  val evmBalance = rlpCodec(p256.xmap[EvmBalance](EvmBalance.apply, _.value))
 
   case class EvmValue(val value: P256) extends AnyVal
   object EvmValue {
     val Zero = EvmValue(0)
   }
-  val evmValue = rlpCodec(p256.xmap[EvmValue](EvmValue.apply, _.value))
 
   case class EvmDifficulty(val value: P) extends AnyVal
   object EvmDifficulty {
     // Block header constraints (see section 4.3.4)
     val Minimum = EvmDifficulty(131072)
   }
-  val evmDifficulty = rlpCodec(p.xmap[EvmDifficulty](EvmDifficulty.apply, _.value))
 
   case class EvmNumber(val value: P) extends AnyVal
   object EvmNumber {
     val Zero = EvmNumber(0)
   }
-  val evmNumber = rlpCodec(p.xmap[EvmNumber](EvmNumber.apply, _.value))
 
   case class EvmPrice(val value: P) extends AnyVal
   object EvmPrice {
     val Zero = EvmPrice(0)
   }
-  val evmPrice = rlpCodec(p.xmap[EvmPrice](EvmPrice.apply, _.value))
 
   case class EvmGas(val value: P) extends AnyVal
   object EvmGas {
@@ -138,13 +131,11 @@ package object evm {
     // Block header constraints (see section 4.3.4)
     val MinimumLimit = EvmGas(5000)
   }
-  val evmGas = rlpCodec(p.xmap[EvmGas](EvmGas.apply, _.value))
 
   case class EvmBloom(val value: B256) extends AnyVal
   object EvmBloom {
     val Empty = EvmBloom(Seq.fill(256)(0.toByte))
   }
-  val evmBloom = rlpCodec(b256.xmap[EvmBloom](EvmBloom.apply, _.value))
 
   class EvmRecoveryId private (val value: P5) extends AnyVal
   object EvmRecoveryId {
@@ -153,7 +144,6 @@ package object evm {
       new EvmRecoveryId(value)
     }
   }
-  val evmRecoveryId = rlpCodec(p5.xmap[EvmRecoveryId](EvmRecoveryId.apply, _.value))
 
   /**
    * Ethereum byte sequence initializer factory.
@@ -185,5 +175,57 @@ package object evm {
     }
   }
 
+  object codecs {
+
+    val evmAddress      = rlpCodec(b20.xmap[EvmAddress](EvmAddress.apply, _.value))
+    val evmHash         = rlpCodec(b32.xmap[EvmHash](EvmHash.apply, _.value))
+    val evmTimestamp    = rlpCodec(p256.xmap[EvmTimestamp](EvmTimestamp.apply, _.value))
+    val evmNonce        = rlpCodec(b8.xmap[EvmNonce](EvmNonce.apply, _.value))
+    val evmBalance      = rlpCodec(p256.xmap[EvmBalance](EvmBalance.apply, _.value))
+    val evmValue        = rlpCodec(p256.xmap[EvmValue](EvmValue.apply, _.value))
+    val evmDifficulty   = rlpCodec(p.xmap[EvmDifficulty](EvmDifficulty.apply, _.value))
+    val evmNumber       = rlpCodec(p.xmap[EvmNumber](EvmNumber.apply, _.value))
+    val evmPrice        = rlpCodec(p.xmap[EvmPrice](EvmPrice.apply, _.value))
+    val evmGas          = rlpCodec(p.xmap[EvmGas](EvmGas.apply, _.value))
+    val evmBloom        = rlpCodec(b256.xmap[EvmBloom](EvmBloom.apply, _.value))
+    val evmRecoveryId   = rlpCodec(p5.xmap[EvmRecoveryId](EvmRecoveryId.apply, _.value))
+
+    val evmEmptyHash    = rlpCodec(constant(EvmHash.Empty.value: _*))
+
+    implicit val evmBlockHeader: RlpCodec[EvmBlock.Header] = rstruct({
+      ("parentHash"         | evmHash       ) ::
+      ("ommersHash"         | evmHash       ) ::
+      ("beneficiary"        | evmAddress    ) ::
+      ("stateRoot"          | evmHash       ) ::
+      ("transactionsRoot"   | evmHash       ) ::
+      ("receiptsRoot"       | evmHash       ) ::
+      ("logsBloom"          | evmBloom      ) ::
+      ("difficulty"         | evmDifficulty ) ::
+      ("number"             | evmNumber     ) ::
+      ("gasLimit"           | evmGas        ) ::
+      ("gasUsed"            | evmGas        ) ::
+      ("timestamp"          | evmTimestamp  ) ::
+      ("extraData"          | b_32          ) ::
+      ("mixHash"            | evmHash       ) ::
+      ("nonce"              | evmNonce      )
+    }.as[EvmBlock.Header])
+
+    implicit val evmSimpleAccount: RlpCodec[EvmSimpleAccount] = rstruct({
+      ("nonce"              | evmNumber     ) ::
+      ("balance"            | evmBalance    ) ::
+      ("storageRoot"        | evmHash       ) ::
+      ("codeHash"           | evmEmptyHash  )
+    }.as[EvmSimpleAccount])
+
+    implicit val evmContractAccount: RlpCodec[EvmContractAccount] = rstruct({
+      ("nonce"              | evmNumber  ) ::
+      ("balance"            | evmBalance ) ::
+      ("storageRoot"        | evmHash    ) ::
+      ("codeHash"           | evmHash    )
+    }.as[EvmContractAccount])
+
+    implicit val evmAccount: RlpCodec[EvmAccount] = rlpCodec(fall)
+
+  }
 
 }

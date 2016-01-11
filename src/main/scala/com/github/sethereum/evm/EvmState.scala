@@ -77,31 +77,6 @@ object EvmState {
 }
 
 
-sealed trait EvmAccount {
-  val nonce: EvmNonce
-  val balance: EvmBalance
-  val storageRoot: EvmHash
-  val codeHash: EvmHash
-
-  // Account validity function (4.1.12)
-//  requireNonce(nonce)
-//  requireBalance(balance)
-//  requireHash(storageRoot)
-//  requireHash(codeHash)
-}
-object EvmAccount {
-  def apply(nonce: EvmNonce, balance: EvmBalance, storageRoot: EvmHash, codeHash: EvmHash): EvmAccount = codeHash match {
-    case EvmHash.Empty => EvmSimpleAccount(nonce, balance, storageRoot)
-    case _ => EvmContractAccount(nonce, balance, storageRoot, codeHash)
-  }
-}
-
-case class EvmSimpleAccount(nonce: EvmNonce, balance: EvmBalance, storageRoot: EvmHash) extends EvmAccount {
-  override val codeHash = EvmHash.Empty
-}
-case class EvmContractAccount(nonce: EvmNonce, balance: EvmBalance, storageRoot: EvmHash, codeHash: EvmHash) extends EvmAccount
-
-
 /**
  * Immutable stack operations for the EVM.
  *
