@@ -19,28 +19,28 @@ class RlpSpec extends WordSpec with Matchers {
 
   "Rlp decoder" should {
 
-    "decode single byte string" in {
+    "decode single byte array" in {
       for (b <- (0x00 to 0x7f)) {
         val bits = BitVector(b)
-        val expected = RlpString(bits)
+        val expected = bits.bytes.toArray
 
-        RlpItem.codec.decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
+        rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
       }
     }
 
-    "decode empty short string" in {
+    "decode empty byte array" in {
       val bits = BitVector(0x80)
-      val expected = RlpString(BitVector.empty)
+      val expected = Array[Byte]()
 
-      RlpItem.codec.decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
+      rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
     }
 
-    "decode single byte short strings" in {
+    "decode single byte short array" in {
       for (b <- (0x80 to 0xff)) {
         val bits = BitVector(0x80 + 1, b)
-        val expected = RlpString(bits.drop(8))
+        val expected = bits.bytes.drop(1).toArray
 
-        RlpItem.codec.decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
+        rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
       }
     }
 
@@ -51,9 +51,9 @@ class RlpSpec extends WordSpec with Matchers {
       for (len <- lengthRange; b <- byteRange) {
         val header = 0x80 + len
         val bits = BitVector(Stream(header.toByte) ++ Stream.fill(len)(b.toByte))
-        val expected = RlpString(bits.drop(8))
+        val expected = bits.bytes.drop(1).toArray
 
-        RlpItem.codec.decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
+        rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
       }
     }
 
@@ -65,48 +65,41 @@ class RlpSpec extends WordSpec with Matchers {
         val lenBytes = trimmedBytes(len)
         val header = (0xb8 - 1 + lenBytes.size).toByte
         val bits = BitVector(Iterator.single(header) ++ lenBytes.iterator ++ Iterator.fill(len)(b.toByte))
-        val expected = RlpString(bits.drop((1 + lenBytes.size) * 8))
+        val expected = bits.bytes.drop(1 + lenBytes.size).toArray
 
-        RlpItem.codec.decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
+        rbyteseq.decode(bits).map(_.map(_.toSeq)) shouldBe Attempt.successful(DecodeResult(expected.toSeq, BitVector.empty))
       }
-    }
-
-  }
-
-  "RLP codec" should {
-
-    "roundtrip an empty list" in {
-      val bits = BitVector(0xc0)
-      val expected = RlpList(0)
-
-      RlpItem.codec.decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
-      RlpItem.codec.decode(bits).flatMap(r => RlpItem.codec.encode(r.value)) shouldBe Attempt.successful(bits)
     }
 
   }
 
   "RLP list codec" should {
 
-    "roundtrip an empty List" in {
+    "roundtrip an empty list" in {
       val bits = BitVector(0xc0)
-      val expected = List()
+      val expected = List[Array[Byte]]()
 
-      rlpList[Int].decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
-      rlpList[Int].decode(bits).flatMap(r => rlpList[Int].encode(r.value)) shouldBe Attempt.successful(bits)
+      rlist(rbyteseq).decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
+      rlist(rbyteseq).decode(bits).flatMap(r => rlist(rbyteseq).encode(r.value)) shouldBe Attempt.successful(bits)
     }
 
     "roundtrip a short List" in {
       val bits = BitVector(0xc3, 0x00, 0x01, 0x02)
       val expected = List(0, 1, 2)
+      val codec = rlist(ruint8)
 
-      rlpList[Int].decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
-      rlpList[Int].decode(bits).flatMap(r => rlpList[Int].encode(r.value)) shouldBe Attempt.successful(bits)
+      codec.decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
+      codec.decode(bits).flatMap(r => codec.encode(r.value)) shouldBe Attempt.successful(bits)
     }
 
+  }
+
+  "RLP struct codec" should {
+
     "roundtrip a short HList" in {
-      val bits = BitVector(0xc3, 0x00, 0x01, 0x81, 0x85)
+      val bits = BitVector(0xc4, 0x00, 0x01, 0x81, 0x85)
       val expected = 0 :: 1 :: 0x85 :: HNil
-      val codec = rlp.rlpList(rlpInt :: rlpInt :: rlpInt)
+      val codec = rstruct(ruint8 :: ruint8 :: ruint8)
 
       codec.decode(bits) shouldBe Attempt.successful(DecodeResult(expected, BitVector.empty))
       codec.decode(bits).flatMap(r => codec.encode(r.value)) shouldBe Attempt.successful(bits)

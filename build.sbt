@@ -10,6 +10,7 @@ scalacOptions ++= Seq("-deprecation", "-feature")
 
 libraryDependencies ++= Seq(
   "org.scodec"        %% "scodec-core"    % "1.8.3",
+  "org.bouncycastle"   % "bcprov-jdk15on" % "1.53",
 
   "org.scalatest"     %% "scalatest"      % "2.2.1" % "test"
 )
