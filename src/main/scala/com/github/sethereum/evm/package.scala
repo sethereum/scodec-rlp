@@ -192,13 +192,6 @@ package object evm {
     }
   }
 
-  implicit class TryAttemptOps[A](t: Try[A]) {
-    def toAttempt: Attempt[A] = t.map(Successful.apply).recover {
-      case e => Failure(Err(e.getMessage))
-    }.get
-
-  }
-
   object codecs {
 
     val evmAddress      = rlpCodec(b20.xmap[EvmAddress](EvmAddress.apply, _.value))
@@ -219,7 +212,12 @@ package object evm {
     val evmAddressOpt   = rlpCodec(rbyteseqOpt(20).xmap[Option[EvmAddress]](_.map(EvmAddress.apply), _.map(_.value)))
     val evmAddressSome  = rlpCodec(b20.xmap[Some[EvmAddress]](b => Some(EvmAddress(b)), _.get.value))
     val evmAddressNone  = rlpCodec(constant(b0.encode(Seq.empty).require))
-    val evmProgram      = rlpCodec(b.narrow[EvmProgram](b => EvmProgram(b).toAttempt, _.code))
+    val evmProgram      = rlpCodec(b.narrow[EvmProgram](b => EvmProgram(b), _.code))
+
+    // Maps Try Failure to Attempt Failure
+    implicit def tryToAttempt[A](t: Try[A]): Attempt[A] = t.map(Successful.apply).recover {
+      case e => Failure(Err(e.getMessage))
+    }.get
 
     implicit val evmBlockHeader: RlpCodec[EvmBlock.Header] = rstruct({
       ("parentHash"         | evmHash       ) ::
@@ -270,7 +268,7 @@ package object evm {
       ("v"                  | evmRecoveryId ) ::
       ("r"                  | b32           ) ::
       ("s"                  | b32           )
-    }.narrow[EvmTransaction](hlist => EvmTransaction(hlist).toAttempt, _.hlist))
+    }.narrow[EvmTransaction](hlist => EvmTransaction(hlist), _.hlist))
 
     implicit val evmCreateTransaction: RlpCodec[EvmCreateTransaction] = rstruct({
       ("nonce"              | evmNumber       ) ::
