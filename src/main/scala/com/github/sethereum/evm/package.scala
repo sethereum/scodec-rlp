@@ -5,10 +5,12 @@ import java.time.{LocalDateTime, ZoneOffset}
 import com.github.sethereum.rlp._
 import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.KeccakDigest
-
+import scodec.Attempt.{Failure, Successful}
 import scodec.codecs._
+import scodec.{Attempt, Err}
 
 import scala.language.implicitConversions
+import scala.util.Try
 
 package object evm {
 
@@ -39,6 +41,10 @@ package object evm {
   type B8 = Seq[Byte]
   val B8 = B(8)
   val b8 = rbyteseq(8)
+
+  type B0 = Seq[Byte]
+  val B0 = B(0)
+  val b0 = rbyteseq(0)
 
   type B20 = Seq[Byte]
   val B20 = B(20)
@@ -137,6 +143,13 @@ package object evm {
     val Empty = EvmBloom(Seq.fill(256)(0.toByte))
   }
 
+  case class EvmLogBloom(val value: B256) extends AnyVal {
+    def index(entry: EvmLogEntry): EvmLogBloom = ???
+  }
+  object EvmLogBloom {
+    val Empty = EvmLogBloom(Seq.fill(256)(0.toByte))
+  }
+
   class EvmRecoveryId private (val value: P5) extends AnyVal
   object EvmRecoveryId {
     def apply(value: P5): EvmRecoveryId = {
@@ -144,6 +157,10 @@ package object evm {
       new EvmRecoveryId(value)
     }
   }
+
+  case class EvmLogTopic(val value: B32) extends AnyVal
+
+  case class EvmLogEntry(address: EvmAddress, topics: List[EvmLogTopic], data: B)
 
   /**
    * Ethereum byte sequence initializer factory.
@@ -175,6 +192,13 @@ package object evm {
     }
   }
 
+  implicit class TryAttemptOps[A](t: Try[A]) {
+    def toAttempt: Attempt[A] = t.map(Successful.apply).recover {
+      case e => Failure(Err(e.getMessage))
+    }.get
+
+  }
+
   object codecs {
 
     val evmAddress      = rlpCodec(b20.xmap[EvmAddress](EvmAddress.apply, _.value))
@@ -189,8 +213,13 @@ package object evm {
     val evmGas          = rlpCodec(p.xmap[EvmGas](EvmGas.apply, _.value))
     val evmBloom        = rlpCodec(b256.xmap[EvmBloom](EvmBloom.apply, _.value))
     val evmRecoveryId   = rlpCodec(p5.xmap[EvmRecoveryId](EvmRecoveryId.apply, _.value))
+    val evmLogTopic     = rlpCodec(b32.xmap[EvmLogTopic](EvmLogTopic.apply, _.value))
 
     val evmEmptyHash    = rlpCodec(constant(EvmHash.Empty.value: _*))
+    val evmAddressOpt   = rlpCodec(rbyteseqOpt(20).xmap[Option[EvmAddress]](_.map(EvmAddress.apply), _.map(_.value)))
+    val evmAddressSome  = rlpCodec(b20.xmap[Some[EvmAddress]](b => Some(EvmAddress(b)), _.get.value))
+    val evmAddressNone  = rlpCodec(constant(b0.encode(Seq.empty).require))
+    val evmProgram      = rlpCodec(b.narrow[EvmProgram](b => EvmProgram(b).toAttempt, _.code))
 
     implicit val evmBlockHeader: RlpCodec[EvmBlock.Header] = rstruct({
       ("parentHash"         | evmHash       ) ::
@@ -210,6 +239,13 @@ package object evm {
       ("nonce"              | evmNonce      )
     }.as[EvmBlock.Header])
 
+    implicit val evmAccount: RlpCodec[EvmAccount] = rstruct({
+      ("nonce"              | evmNumber  ) ::
+      ("balance"            | evmBalance ) ::
+      ("storageRoot"        | evmHash    ) ::
+      ("codeHash"           | evmHash    )
+    }.xmap[EvmAccount](EvmAccount.apply, _.hlist))
+
     implicit val evmSimpleAccount: RlpCodec[EvmSimpleAccount] = rstruct({
       ("nonce"              | evmNumber     ) ::
       ("balance"            | evmBalance    ) ::
@@ -224,7 +260,47 @@ package object evm {
       ("codeHash"           | evmHash    )
     }.as[EvmContractAccount])
 
-    implicit val evmAccount: RlpCodec[EvmAccount] = rlpCodec(fall)
+    implicit val evmTransaction: RlpCodec[EvmTransaction] = rstruct({
+      ("nonce"              | evmNumber     ) ::
+      ("gasPrice"           | evmPrice      ) ::
+      ("gasLimit"           | evmGas        ) ::
+      ("to"                 | evmAddressOpt ) ::
+      ("value"              | evmValue      ) ::
+      ("payload"            | b             ) ::
+      ("v"                  | evmRecoveryId ) ::
+      ("r"                  | b32           ) ::
+      ("s"                  | b32           )
+    }.narrow[EvmTransaction](hlist => EvmTransaction(hlist).toAttempt, _.hlist))
+
+    implicit val evmCreateTransaction: RlpCodec[EvmCreateTransaction] = rstruct({
+      ("nonce"              | evmNumber       ) ::
+      ("gasPrice"           | evmPrice        ) ::
+      ("gasLimit"           | evmGas          ) ::
+      ("to"                 | evmAddressNone  ) ::
+      ("value"              | evmValue        ) ::
+      ("init"               | evmProgram      ) ::
+      ("v"                  | evmRecoveryId   ) ::
+      ("r"                  | b32             ) ::
+      ("s"                  | b32             )
+    }.as[EvmCreateTransaction])
+
+    implicit val evmCallTransaction: RlpCodec[EvmCallTransaction] = rstruct({
+      ("nonce"              | evmNumber       ) ::
+      ("gasPrice"           | evmPrice        ) ::
+      ("gasLimit"           | evmGas          ) ::
+      ("to"                 | evmAddressSome  ) ::
+      ("value"              | evmValue        ) ::
+      ("data"               | b               ) ::
+      ("v"                  | evmRecoveryId   ) ::
+      ("r"                  | b32             ) ::
+      ("s"                  | b32             )
+    }.as[EvmCallTransaction])
+
+    implicit val evmLogEntry: RlpCodec[EvmLogEntry] = rstruct({
+      ("address"            | evmAddress         ) ::
+      ("topics"             | rlist(evmLogTopic) ) ::
+      ("data"               | b                  )
+    }.as[EvmLogEntry])
 
   }
 

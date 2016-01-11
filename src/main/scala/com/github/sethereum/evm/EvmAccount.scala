@@ -1,21 +1,28 @@
 package com.github.sethereum.evm
 
 import shapeless.HNil
+import shapeless._
 
 sealed trait EvmAccount {
   val nonce       : EvmNumber
   val balance     : EvmBalance
   val storageRoot : EvmHash
   val codeHash    : EvmHash
+
+  def hlist = nonce :: balance :: storageRoot :: codeHash :: HNil
 }
 
 object EvmAccount {
+
+  type HList = EvmNumber :: EvmBalance :: EvmHash :: EvmHash :: HNil
+
   def apply(nonce: EvmNumber, balance: EvmBalance, storageRoot: EvmHash, codeHash: EvmHash): EvmAccount = codeHash match {
     case EvmHash.Empty => EvmSimpleAccount(nonce, balance, storageRoot)
     case _ => EvmContractAccount(nonce, balance, storageRoot, codeHash)
   }
-  def unapply(hlist : (EvmNumber :: EvmBalance :: EvmHash :: EvmHash)): Option[EvmAccount] = hlist match {
-    case nonce :: balance :: storageRoot :: EvmHash.Empty => EvmSimpleAccount(nonce, balance, storageRoot)
+
+  def apply(hlist: EvmAccount.HList): EvmAccount = hlist match {
+    case nonce :: balance :: storageRoot :: codeHash :: HNil => EvmAccount(nonce, balance, storageRoot, codeHash)
   }
 }
 
@@ -33,3 +40,4 @@ case class EvmContractAccount private[evm] (
   storageRoot : EvmHash,
   codeHash    : EvmHash
 ) extends EvmAccount
+

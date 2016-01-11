@@ -53,4 +53,6 @@ object EvmProgram {
     EvmProgram(code.view, jumpDests)
   }
 
+  def unapply(code: B): Option[EvmProgram] = EvmProgram(code).toOption
+
 }
