@@ -18,7 +18,7 @@ object EvmBlock {
     receiptsRoot      : EvmHash       = EvmHash.Empty,
     logsBloom         : EvmBloom      = EvmBloom.Empty,
     difficulty        : EvmDifficulty = EvmDifficulty.Minimum,
-    number            : EvmNumber   = EvmNumber.Zero,
+    number            : EvmNumber     = EvmNumber.Zero,
     gasLimit          : EvmGas        = EvmGas.MinimumLimit,
     gasUsed           : EvmGas        = EvmGas.Zero,
     timestamp         : EvmTimestamp  = EvmTimestamp.now(),

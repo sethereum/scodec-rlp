@@ -27,17 +27,21 @@ object EvmAccount {
 }
 
 case class EvmSimpleAccount private[evm] (
-  nonce       : EvmNumber,
+  nonce       : EvmNumber = EvmNumber.Zero,
   balance     : EvmBalance,
-  storageRoot : EvmHash
+  storageRoot : EvmHash = EvmHash.Empty
 ) extends EvmAccount {
   val codeHash = EvmHash.Empty
 }
 
+object EvmSimpleAccount {
+  def apply(balance: EvmBalance): EvmSimpleAccount = new EvmSimpleAccount(balance = balance)
+}
+
 case class EvmContractAccount private[evm] (
-  nonce       : EvmNumber,
+  nonce       : EvmNumber = EvmNumber.Zero,
   balance     : EvmBalance,
-  storageRoot : EvmHash,
+  storageRoot : EvmHash = EvmHash.Empty,
   codeHash    : EvmHash
 ) extends EvmAccount
 

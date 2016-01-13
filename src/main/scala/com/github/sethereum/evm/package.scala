@@ -152,6 +152,10 @@ package object evm {
 
   class EvmRecoveryId private (val value: P5) extends AnyVal
   object EvmRecoveryId {
+
+    val Low = EvmRecoveryId(27)
+    val High = EvmRecoveryId(28)
+
     def apply(value: P5): EvmRecoveryId = {
       require(value == 27 || value == 28, s"invalid recovery id $value")
       new EvmRecoveryId(value)

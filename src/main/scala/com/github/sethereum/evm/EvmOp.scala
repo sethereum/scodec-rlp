@@ -208,7 +208,7 @@ object EvmOp {
     def sha3   = (begin: Int) => (len: Int) => (state: EvmState) => { state.memSlice(begin, begin + len).flatMap { case (m, s) => s.push(EvmHash.keccak256(m)) } }
 
     def address       = (state: EvmState) => { state.push(state.environment.address) }
-    def origin        = (state: EvmState) => { state.push(state.environment.origin) }
+    def origin        = (state: EvmState) => { state.push(state.environment.originator.sender) }
     def caller        = (state: EvmState) => { state.push(state.environment.call.caller) }
     def callvalue     = (state: EvmState) => { state.push(state.environment.call.callValue) }
     def calldataload  = (offset: Int) => (state: EvmState) => { state.push(state.environment.call.callData.slice(offset, offset + EvmWord.BYTES).padTo(EvmWord.BYTES, 0.toByte)) }
