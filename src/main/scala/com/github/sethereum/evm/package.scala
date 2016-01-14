@@ -73,6 +73,7 @@ package object evm {
   val P256 = P(256, (BigInt(1) << 256) - 1)
   val p256 = rbigint(256)
 
+  type Y = Seq[Byte]
 
   // Evm type value classes
 
