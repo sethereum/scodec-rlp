@@ -7,7 +7,7 @@ import org.bouncycastle.crypto.Digest
 import org.bouncycastle.crypto.digests.KeccakDigest
 import scodec.Attempt.{Failure, Successful}
 import scodec.codecs._
-import scodec.{Attempt, Err}
+import scodec.{Codec, Attempt, Err}
 
 import scala.language.implicitConversions
 import scala.util.Try
@@ -76,6 +76,10 @@ package object evm {
   type Y = Seq[Byte]
 
   // Evm type value classes
+
+  case class Nibble private[evm] (val value: Int) extends AnyVal
+
+  implicit def nibbleToInt(nibble: Nibble) = nibble.value
 
   case class EvmAddress(val value: B20) extends AnyVal
   object EvmAddress {
@@ -198,6 +202,9 @@ package object evm {
   }
 
   object codecs {
+
+    val nibble          = uint(4).xmap[Nibble](Nibble.apply, _.value)
+    val nibbles         = list(nibble)
 
     val evmAddress      = rlpCodec(b20.xmap[EvmAddress](EvmAddress.apply, _.value))
     val evmHash         = rlpCodec(b32.xmap[EvmHash](EvmHash.apply, _.value))

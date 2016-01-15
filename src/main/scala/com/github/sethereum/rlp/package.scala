@@ -48,7 +48,7 @@ package object rlp {
   // Supporting functions and codecs
 
   /**
-   * Codec for RLP length prefix, which either contains either a value < 128 or a length.
+   * Codec for RLP length prefix, which either contains either a value < offset or a length.
    *
    * @param offset
    * @return Left if length field contains a value, otherwise a Right containing the field length
@@ -82,7 +82,7 @@ package object rlp {
       case Right(len) => Successful(len)
     }, Right.apply)
 
-  private val rbytes: RlpCodec[ByteVector] = RlpCodec(
+  val rbytes: RlpCodec[ByteVector] = RlpCodec(
     rbyteslength.consume { _ match {
       case Left(v) => provide(ByteVector(v))    // Single byte value < 128
       case Right(l) => bytes(l)
@@ -204,17 +204,23 @@ package object rlp {
 
   val rbyteseq: RlpCodec[Seq[Byte]] = RlpCodec(rbytes.xmap[Seq[Byte]](_.toSeq, ByteVector.apply))
 
-  private def validate(size:Int)(a: Seq[Byte]): Attempt[Seq[Byte]] = {
-    if (a.length != size) Failure(Err(s"invalid fixed size RLP byte array (expected: $size, actual: ${a.length}"))
-    else Successful(a)
+  // Special case empty (size 0) string
+  val rbyteseq0 = constant(128)
+
+  val rbyteseqOpt: RlpCodec[Option[Seq[Byte]]] = RlpCodec(recover(rbyteseq0).consume(
+    empty => if (empty) provide(None) else rbyteseq.xmap[Some[Seq[Byte]]](Some.apply, _.get)
+  )(_.isEmpty))
+
+  private def validate[A, S <: Seq[A]](size: Int)(seq: S): Attempt[S] = {
+    if (seq.size != size) Failure(Err(s"invalid fixed-size RLP item (expected: $size, actual: ${seq.size}"))
+    else Successful(seq)
   }
 
   def rbyteseq(size: Int): RlpCodec[Seq[Byte]] = RlpCodec(rbyteseq.exmap(validate(size), validate(size)))
 
-  def rbyteseqOpt(size: Int): RlpCodec[Option[Seq[Byte]]] = RlpCodec(rbytes.exmap(
-    bytes => if (bytes.isEmpty) Successful(None) else validate(size)(bytes.toSeq).map(Some.apply),
-    _.map(validate(size)).map(_.map(ByteVector.apply)).getOrElse(Successful(ByteVector.empty))
-  ))
+  def rbyteseqOpt(size: Int): RlpCodec[Option[Seq[Byte]]] = RlpCodec(recover(rbyteseq0).consume(
+    empty => if (empty) provide(None) else rbyteseq(size).xmap[Some[Seq[Byte]]](Some.apply, _.get)
+  )(_.isEmpty))
 
   def rbyteseq(min: Int, max: Int): RlpCodec[Seq[Byte]] = {
     def validate(a: Seq[Byte]): Attempt[Seq[Byte]] = {
@@ -233,6 +239,8 @@ package object rlp {
   // List and structure codecs
 
   def rlist[A](itemCodec: RlpCodec[A]): RlpCodec[List[A]] = RlpCodec(variableSizeBytes(rlistlength, list(itemCodec)))
+
+  def rlist[A](size: Int, itemCodec: RlpCodec[A]): RlpCodec[List[A]] = RlpCodec(rlist(itemCodec).exmap[List[A]](validate(size), validate(size)))
 
   // RLP structure codec (wrap existing codec in a list)
 
