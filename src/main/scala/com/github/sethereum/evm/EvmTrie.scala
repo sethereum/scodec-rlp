@@ -1,149 +1,108 @@
 package com.github.sethereum.evm
 
-import com.github.sethereum.evm.EvmTrie.NodeRepository
+import com.github.sethereum.evm.codecs._
 import com.github.sethereum.rlp._
 import scodec.Attempt.{Failure, Successful}
-import scodec.{Err, Codec}
-import scodec.bits.{ByteVector, BitVector}
+import scodec.bits.{BitVector, ByteVector}
+import scodec.codecs._
+import scodec.{Codec, Err}
 
 import scala.concurrent.Future
-import scala.collection.mutable
-
-import codecs._
-import scodec.codecs._
 
 
-//case class EvmTrie(repository: NodeRepository, rootHash: EvmHash) {
-//
-//  def get(key: B): Future[Option[B]]
-//  def put(key: B, value: B): Future[EvmTrie]
-//  def remove(key: B): Future[(EvmTrie, Option[B])]
-//
-//}
+case class EvmTrie(root: EvmHash)(implicit db: EvmTrieDb) {
+
+  def get(key: B): Future[Option[B]] = ???
+  def put(key: B, value: B): Future[EvmTrie] = ???
+  def remove(key: B): Future[(EvmTrie, Option[B])] = ???
+
+}
+
+trait EvmTrieDb {
+  def get(hash: EvmHash): Future[Option[EvmTrie.Node]]
+  def put(node: EvmTrie.Node): Future[EvmHash]
+}
+
 
 object EvmTrie {
 
-//  sealed trait Key { val nibbles: List[Nibble] }
-//  case class LeafKey(nibbles: List[Nibble]) extends Key
-//  case class ExtensionKey(nibbles: List[Nibble]) extends Key
-
   case class Key(leaf: Boolean, nibbles: List[Nibble])
 
-  type NodeHash = EvmHash
-
   sealed abstract class Node
-  sealed abstract class KeyedNode extends Node { val key: List[Nibble] }
 
   case object EmptyNode extends Node
+
+  sealed abstract class KeyedNode extends Node { val key: List[Nibble] }
   case class LeafNode(key: List[Nibble], value: B) extends KeyedNode
-  case class ExtensionNode(key: List[Nibble], value: NodeHash) extends KeyedNode {
+  case class ExtensionNode(key: List[Nibble], value: EvmHash) extends KeyedNode {
     require(key.size > 1, s"invalid extension node key size (size: ${key.size})")
   }
   case class BranchNode(nodes: List[Node], value: Option[B]) extends Node
 
+  case class ExtensionNode1(key: List[Nibble], value: Either[EvmHash, Node]) extends KeyedNode {
+    require(key.size > 1, s"invalid extension node key size (size: ${key.size})")
+    // Note: value can not be an extension node
+  }
+  case class BranchNode1(nodes: List[Either[EvmHash, Node]], value: Option[B]) extends Node
 
-  object Node {
 
-//    def apply(bytes: B): Node = bytes.size match {
-//      case 0 => Some(Future.successful(EmptyNode))
-//      case l if l < 32 =>
-//      case 32 =>
-//    }
+  sealed trait CappedNode { val key: B_32 }
+  case class DirectNode private[evm] (key: B_32) extends CappedNode
+  case class IndirectNode private[evm] (key: EvmHash, value: B) extends CappedNode
+  object CappedNode {
+    def apply(node: Node): CappedNode = {
+      val encoded = rnode.encode(node).map(_.toByteArray.toSeq).require
+      if (encoded.size < 32) DirectNode(encoded)
+      else IndirectNode(EvmHash.keccak256(encoded), encoded)
+    }
   }
 
-  trait NodeRepository {
-    def get(hash: EvmHash): Future[Option[Node]]
-    def put(hash: EvmHash, node: Node): Future[Unit]
-  }
 
-  val node = recover(rbyteseq0).consume[Node] { empty =>
+
+  val rnode: RlpCodec[Node] = rlpCodec(recover(rbyteseq0).consume[Node] { empty =>
     if (empty) provide(EmptyNode)
     else nonEmptyNode
-  } { _ == EmptyNode }
+  } { _ == EmptyNode })
 
-//  val keyedNode = nibble.consume[KeyedNode](_ match { case HexPrefix(leaf, odd) =>
-//    (if (odd) ignore(0) else ignore(4)) ~>
-//      nibbles.consume[KeyedNode](key =>
-//        if (leaf) LeafNode(LeafKey(n),
-//        else ExtensionKey(n), _.nibbles)
-//  })(HexPrefix.apply)
+  val rnodecap: Codec[Either[EvmHash, Node]] = rbytes.narrow[Either[EvmHash, Node]](bytes =>
+    bytes.size match {
+      case 0 => Successful(Right(EmptyNode))
+      case size if size < 32 => nonEmptyNode.decode(bytes.bits).map(r => Right(r.value))
+      case size if size == 32 => Successful(Left(EvmHash(bytes.toSeq)))
+      case size => Failure(Err(s"unexpected capped node size (size: $size, bytes: $bytes)"))
+    }, _ match {
+      case Left(hash) => ByteVector(hash)
+      case Right(node) => rnode.encode(node).require.bytes
+    })
 
-  val nonEmptyNode = rlist(rbytes).narrow[Node](
+  val nonEmptyNode = rlpCodec(rlist(rbytes).narrow[Node](
     list => list.size match {
-      case 2 => for {
-          key <- key.decode(list(0).bits)
-          node <- key.value match {
-            case Key(true, key) => LeafNode(key, list(1).toSeq)
-            case Key(false, key) => ExtensionNode(key, EvmHash(list(1).toSeq))
-          }
-        } yield node
+      case 2 => key.decode(list(0).bits).map(_.value match {
+        case Key(true, k) => LeafNode(k, list(1).toSeq)
+        case Key(false, k) => ExtensionNode(k, EvmHash(list(1).toSeq))
+      })
       case 17 => list.splitAt(16) match { case (branches, bytes) =>
         val nodes: List[Node] = for {
             branch <- branches
-            node <- node.decode(branch.bits)
-          } yield node.value
+            node <- rnode.decode(branch.bits)
+          } yield node
         for (value <- rbyteseqOpt.decode(bytes.head.bits))
           yield BranchNode(nodes, value.value)
       }
       case len => Failure(Err(s"invalid node list size $len"))
     },
     _ match {
-      case LeafNode(k, v) => List(key.encode(Key(true, k)).require.bytes, rbyteseq.encode(v).require.bytes)
-      case ExtensionNode(k, v) => List(key.encode(Key(false, k)).require.bytes, evmHash.encode(v).require.bytes)
-      case BranchNode(ns, v) => ns.map(n => node.encode(n).require.bytes) ++ rbyteseqOpt.encode(v).require.bytes
+      case LeafNode(k, v) => List(key.encode(Key(true, k)).require.bytes, ByteVector(v))
+      case ExtensionNode(k, v) => List(key.encode(Key(false, k)).require.bytes, ByteVector(v))
+      case BranchNode(ns, v) => ns.map(n => rnode.encode(n).require.bytes) ++ List(v.map(ByteVector.apply).getOrElse(ByteVector.empty))
     }
-  )
-
-  // Keyed node key hex prefix to indicate node type and nibbles parity
-  // See Appendix C - Hex-Prefix Encoding
-  case class HexPrefix(leaf: Boolean, odd: Boolean)
-  object HexPrefix {
-    def apply(key: Key): Nibble = key match {
-      case LeafKey(n)      => Nibble(2 + (n.size % 2))
-      case ExtensionKey(n) => Nibble(0 + (n.size % 2))
-    }
-    def apply(node: KeyedNode): Nibble = node match {
-      case LeafNode(k, _)      => Nibble(2 + (k.size % 2))
-      case ExtensionNode(k, _) => Nibble(0 + (k.size % 2))
-    }
-    // Extract (leaf, odd)
-    def unapply(n: Nibble): Option[HexPrefix] =
-      Some(HexPrefix((n & 2) != 0, (n & 1) != 0))
-  }
-
-  val hexPrefix2: Codec[HexPrefix] =
-    constant(BitVector(0, 0)) ~>
-      (("leaf" | bool(1)) ~ ("odd" | bool(1))).consume[HexPrefix] { case (leaf, odd) =>
-        (if (odd) ignore(0) else ignore(4)) ~>
-          provide(HexPrefix(leaf, odd))
-    } { p => (p.leaf, p.odd) }
-
-//  val hexPrefix: Codec[HexPrefix] =
-//    constant(BitVector(0, 0)) ~>
-//      (("leaf" | bool(1)).consume(leaf =>
-//        ("odd" | bool(1)).consume(odd =>
-//          (if (odd) ignore(0) else ignore(4)) ~>
-//            provide(HexPrefix(leaf, odd)))))
-
-
-//  val key2: Codec[List[Nibble]] = ("odd" | bool(1))
-//    .consume(odd => (if (odd) ignore(0) else ignore(4)) ~> nibbles)(_.size % 2 == 1)
-
-//  val keyedNode: Codec[KeyedNode] = key >>:~ { _ match {
-//    case key @ Key(true, _) => LeafNode(key, )
-//  }}
+  ))
 
   // Key = prefix + optional padding nibble + key nibbles
   val key: Codec[Key] = constant(BitVector(0, 0)) ~> (
     ("leaf" | bool(1)) ::
     ("odd" | bool(1)).consume(odd => (if (odd) ignore(0) else ignore(4)) ~> nibbles)(_.size % 2 == 1)
   ).as[Key]
-
-  // Key = prefix + optional padding nibble + key nibbles
-//  val key: Codec[Key] = nibble.consume[Key](_ match { case HexPrefix(leaf, odd) =>
-//    (if (odd) ignore(0) else ignore(4)) ~>
-//      nibbles.xmap[Key](n => if (leaf) LeafKey(n) else ExtensionKey(n), _.nibbles)
-//  })(HexPrefix.apply)
 
 }
 

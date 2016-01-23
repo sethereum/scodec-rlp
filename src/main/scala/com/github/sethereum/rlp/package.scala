@@ -75,9 +75,9 @@ package object rlp {
       case Right(len) => Failure(Err(s"length out of range (length: $len)"))
     }, _.right.map(_.toLong))
 
-  private val rbyteslength = rlength31(128)
+  val rbyteslength = rlength31(128)
 
-  private val rlistlength = rlength31(192).narrow[Int](_ match {
+  val rlistlength = rlength31(192).narrow[Int](_ match {
       case Left(bad) => Failure(Err(s"invalid RLP list header $bad"))
       case Right(len) => Successful(len)
     }, Right.apply)
