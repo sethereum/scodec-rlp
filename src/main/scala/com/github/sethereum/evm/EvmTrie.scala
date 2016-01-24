@@ -5,9 +5,11 @@ import com.github.sethereum.rlp._
 import scodec.Attempt.{Failure, Successful}
 import scodec.bits.{BitVector, ByteVector}
 import scodec.codecs._
-import scodec.{Codec, Err}
+import scodec.{Attempt, Codec, Err}
 
+import collection.mutable
 import scala.concurrent.Future
+import scala.util.{Success, Try}
 
 
 case class EvmTrie(root: EvmHash)(implicit db: EvmTrieDb) {
@@ -29,11 +31,12 @@ object EvmTrie {
   case class Key(leaf: Boolean, nibbles: List[Nibble])
 
   sealed abstract class Node
+  sealed abstract class KeyedNode extends Node { val key: List[Nibble] }
 
   case object EmptyNode extends Node
 
-  sealed abstract class KeyedNode extends Node { val key: List[Nibble] }
   case class LeafNode(key: List[Nibble], value: B) extends KeyedNode
+
   case class ExtensionNode(key: List[Nibble], value: EvmHash) extends KeyedNode {
     require(key.size > 1, s"invalid extension node key size (size: ${key.size})")
   }
@@ -64,7 +67,7 @@ object EvmTrie {
     else nonEmptyNode
   } { _ == EmptyNode })
 
-  val rnodecap: Codec[Either[EvmHash, Node]] = rbytes.narrow[Either[EvmHash, Node]](bytes =>
+  val nodecap: Codec[Either[EvmHash, Node]] = bytes.narrow[Either[EvmHash, Node]](bytes =>
     bytes.size match {
       case 0 => Successful(Right(EmptyNode))
       case size if size < 32 => nonEmptyNode.decode(bytes.bits).map(r => Right(r.value))
@@ -81,13 +84,12 @@ object EvmTrie {
         case Key(true, k) => LeafNode(k, list(1).toSeq)
         case Key(false, k) => ExtensionNode(k, EvmHash(list(1).toSeq))
       })
-      case 17 => list.splitAt(16) match { case (branches, bytes) =>
-        val nodes: List[Node] = for {
-            branch <- branches
-            node <- rnode.decode(branch.bits)
-          } yield node
-        for (value <- rbyteseqOpt.decode(bytes.head.bits))
-          yield BranchNode(nodes, value.value)
+      case 17 => list.splitAt(16) match { case (branches, value :: Nil) =>
+        branches.foldLeft(Attempt.successful(List[Node]())) { case (attempt, bytes) =>
+          attempt.flatMap(nodes => rnode.decode(bytes.bits).map(r => nodes :+ r.value))
+        }.flatMap { nodes =>
+          rbyteseqOpt.decode(value.bits).map(r => BranchNode(nodes, r.value))
+        }
       }
       case len => Failure(Err(s"invalid node list size $len"))
     },
