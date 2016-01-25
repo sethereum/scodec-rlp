@@ -207,19 +207,19 @@ package object rlp {
   // Special case empty (size 0) string
   val rbyteseq0 = constant(128)
 
-  val rbyteseqOpt: RlpCodec[Option[Seq[Byte]]] = RlpCodec(recover(rbyteseq0).consume(
-    empty => if (empty) provide(None) else rbyteseq.xmap[Some[Seq[Byte]]](Some.apply, _.get)
+  val rbyteseqOpt: RlpCodec[Option[Seq[Byte]]] = RlpCodec(recover(rbyteseq0).consume[Option[Seq[Byte]]](
+    empty => if (empty) provide(None) else rbyteseq.xmap(Some.apply, _.get)
   )(_.isEmpty))
 
-  private def validate[A, S <: Seq[A]](size: Int)(seq: S): Attempt[S] = {
+  private def validate[S <: Seq[_]](size: Int)(seq: S): Attempt[S] = {
     if (seq.size != size) Failure(Err(s"invalid fixed-size RLP item (expected: $size, actual: ${seq.size}"))
     else Successful(seq)
   }
 
-  def rbyteseq(size: Int): RlpCodec[Seq[Byte]] = RlpCodec(rbyteseq.exmap(validate(size), validate(size)))
+  def rbyteseq(size: Int): RlpCodec[Seq[Byte]] = RlpCodec(rbyteseq.exmap[Seq[Byte]](validate(size), validate(size)))
 
-  def rbyteseqOpt(size: Int): RlpCodec[Option[Seq[Byte]]] = RlpCodec(recover(rbyteseq0).consume(
-    empty => if (empty) provide(None) else rbyteseq(size).xmap[Some[Seq[Byte]]](Some.apply, _.get)
+  def rbyteseqOpt(size: Int): RlpCodec[Option[Seq[Byte]]] = RlpCodec(recover(rbyteseq0).consume[Option[Seq[Byte]]](
+    empty => if (empty) provide(None) else rbyteseq(size).xmap(Some.apply, _.get)
   )(_.isEmpty))
 
   def rbyteseq(min: Int, max: Int): RlpCodec[Seq[Byte]] = {

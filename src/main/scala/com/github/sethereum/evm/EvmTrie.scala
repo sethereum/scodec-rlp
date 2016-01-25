@@ -21,90 +21,92 @@ case class EvmTrie(root: EvmHash)(implicit db: EvmTrieDb) {
 }
 
 trait EvmTrieDb {
-  def get(hash: EvmHash): Future[Option[EvmTrie.Node]]
+  def get(hash: EvmHash): Future[EvmTrie.Node]
   def put(node: EvmTrie.Node): Future[EvmHash]
 }
 
 
 object EvmTrie {
 
+  type Nibbles = List[Nibble]
+  type NodeEntry = Either[EvmHash, Node]
+
   case class Key(leaf: Boolean, nibbles: List[Nibble])
+
+//  sealed trait NodeKey {
+//    def apply(nibbles: Iterator[Nibble]): Option[]
+//  }
+
+
+  implicit class NodeEntryOps(val entry: NodeEntry) extends AnyVal {
+    def node(implicit db: EvmTrieDb): Future[Node] = entry match {
+      case Left(hash) => db.get(hash)
+      case Right(node) => Future.successful(node)
+    }
+  }
 
   sealed abstract class Node
   sealed abstract class KeyedNode extends Node { val key: List[Nibble] }
 
   case object EmptyNode extends Node
 
-  case class LeafNode(key: List[Nibble], value: B) extends KeyedNode
+  case class LeafNode(key: Nibbles, value: B) extends KeyedNode
 
-  case class ExtensionNode(key: List[Nibble], value: EvmHash) extends KeyedNode {
-    require(key.size > 1, s"invalid extension node key size (size: ${key.size})")
-  }
-  case class BranchNode(nodes: List[Node], value: Option[B]) extends Node
-
-  case class ExtensionNode1(key: List[Nibble], value: Either[EvmHash, Node]) extends KeyedNode {
+  case class ExtensionNode(key: Nibbles, value: NodeEntry) extends KeyedNode {
     require(key.size > 1, s"invalid extension node key size (size: ${key.size})")
     // Note: value can not be an extension node
   }
-  case class BranchNode1(nodes: List[Either[EvmHash, Node]], value: Option[B]) extends Node
+  case class BranchNode(entries: List[NodeEntry], value: Option[B]) extends Node
 
 
-  sealed trait CappedNode { val key: B_32 }
-  case class DirectNode private[evm] (key: B_32) extends CappedNode
-  case class IndirectNode private[evm] (key: EvmHash, value: B) extends CappedNode
-  object CappedNode {
-    def apply(node: Node): CappedNode = {
-      val encoded = rnode.encode(node).map(_.toByteArray.toSeq).require
-      if (encoded.size < 32) DirectNode(encoded)
-      else IndirectNode(EvmHash.keccak256(encoded), encoded)
-    }
-  }
+  object codecs {
 
+    val rnode: RlpCodec[Node] = rlpCodec(recover(rbyteseq0).consume[Node] { empty =>
+      if (empty) provide(EmptyNode)
+      else nonEmptyNode
+    } { _ == EmptyNode })
 
-
-  val rnode: RlpCodec[Node] = rlpCodec(recover(rbyteseq0).consume[Node] { empty =>
-    if (empty) provide(EmptyNode)
-    else nonEmptyNode
-  } { _ == EmptyNode })
-
-  val nodecap: Codec[Either[EvmHash, Node]] = bytes.narrow[Either[EvmHash, Node]](bytes =>
-    bytes.size match {
-      case 0 => Successful(Right(EmptyNode))
-      case size if size < 32 => nonEmptyNode.decode(bytes.bits).map(r => Right(r.value))
-      case size if size == 32 => Successful(Left(EvmHash(bytes.toSeq)))
-      case size => Failure(Err(s"unexpected capped node size (size: $size, bytes: $bytes)"))
-    }, _ match {
-      case Left(hash) => ByteVector(hash)
-      case Right(node) => rnode.encode(node).require.bytes
-    })
-
-  val nonEmptyNode = rlpCodec(rlist(rbytes).narrow[Node](
-    list => list.size match {
-      case 2 => key.decode(list(0).bits).map(_.value match {
-        case Key(true, k) => LeafNode(k, list(1).toSeq)
-        case Key(false, k) => ExtensionNode(k, EvmHash(list(1).toSeq))
-      })
-      case 17 => list.splitAt(16) match { case (branches, value :: Nil) =>
-        branches.foldLeft(Attempt.successful(List[Node]())) { case (attempt, bytes) =>
-          attempt.flatMap(nodes => rnode.decode(bytes.bits).map(r => nodes :+ r.value))
-        }.flatMap { nodes =>
-          rbyteseqOpt.decode(value.bits).map(r => BranchNode(nodes, r.value))
+    val nonEmptyNode = rlpCodec(rlist(rbytes).narrow[Node](
+      list => list.size match {
+        case 2 => key.decode(list(0).bits).map(_.value match {
+          case Key(true, k) => LeafNode(k, list(1).toSeq)
+          case Key(false, k) => ExtensionNode(k, Left(EvmHash(list(1).toSeq)))
+        })
+        case 17 => list.splitAt(16) match { case (branches, value) =>
+          branches.foldLeft(Attempt.successful(List[NodeEntry]())) { case (attempt, branch) =>
+            attempt.flatMap(entries => nodeEntry.decode(branch.bits).map(r => entries :+ r.value))
+          }.flatMap { nodes =>
+            rbyteseqOpt.decode(value.head.bits).map(r => BranchNode(nodes, r.value))
+          }
         }
+        case size => Failure(Err(s"invalid node list size $size"))
+      },
+      _ match {
+        case LeafNode(k, v) => List(key.encode(Key(true, k)).require.bytes, ByteVector(v))
+        case ExtensionNode(k, v) => List(key.encode(Key(false, k)).require.bytes, nodeEntry.encode(v).require.bytes)
+        case BranchNode(es, v) => es.map(e => nodeEntry.encode(e).require.bytes) ++ List(v.map(ByteVector.apply).getOrElse(ByteVector.empty))
+        case EmptyNode => List(ByteVector.empty)
       }
-      case len => Failure(Err(s"invalid node list size $len"))
-    },
-    _ match {
-      case LeafNode(k, v) => List(key.encode(Key(true, k)).require.bytes, ByteVector(v))
-      case ExtensionNode(k, v) => List(key.encode(Key(false, k)).require.bytes, ByteVector(v))
-      case BranchNode(ns, v) => ns.map(n => rnode.encode(n).require.bytes) ++ List(v.map(ByteVector.apply).getOrElse(ByteVector.empty))
-    }
-  ))
+    ))
 
-  // Key = prefix + optional padding nibble + key nibbles
-  val key: Codec[Key] = constant(BitVector(0, 0)) ~> (
-    ("leaf" | bool(1)) ::
-    ("odd" | bool(1)).consume(odd => (if (odd) ignore(0) else ignore(4)) ~> nibbles)(_.size % 2 == 1)
-  ).as[Key]
+    val nodeEntry: Codec[Either[EvmHash, Node]] = bytes.narrow[Either[EvmHash, Node]](bytes =>
+      bytes.size match {
+        case 0 => Successful(Right(EmptyNode))
+        case size if size < 32 => nonEmptyNode.decode(bytes.bits).map(r => Right(r.value))
+        case size if size == 32 => Successful(Left(EvmHash(bytes.toSeq)))
+        case size => Failure(Err(s"unexpected capped node size (size: $size, bytes: $bytes)"))
+      }, _ match {
+        case Left(hash) => ByteVector(hash.value)
+        case Right(node) => rnode.encode(node).require.bytes
+      })
+
+    // Key = prefix + optional padding nibble + key nibbles
+    val key: Codec[Key] = constant(BitVector(0, 0)) ~> (
+      ("leaf" | bool(1)) ::
+      ("odd" | bool(1)).consume(odd => (if (odd) ignore(0) else ignore(4)) ~> nibbles)(_.size % 2 == 1)
+    ).as[Key]
+
+  }
 
 }
 
