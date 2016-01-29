@@ -31,12 +31,17 @@ object EvmTrie {
   type Nibbles = List[Nibble]
   type NodeEntry = Either[EvmHash, Node]
 
-  case class Key(leaf: Boolean, nibbles: List[Nibble])
+  object NodeEntry {
 
-//  sealed trait NodeKey {
-//    def apply(nibbles: Iterator[Nibble]): Option[]
-//  }
+    val empty = Right(EmptyNode)
 
+    def apply(node: Node)(implicit db: EvmTrieDb): Future[NodeEntry] = {
+      Future(codecs.rnode.encode(node).require).flatMap(bits =>
+        if (bits.bytes.size < 32) Future.successful(Right(node))
+        else db.put(node).map(Left.apply)
+      )
+    }
+  }
 
   implicit class NodeEntryOps(val entry: NodeEntry) extends AnyVal {
     def node(implicit db: EvmTrieDb): Future[Node] = entry match {
@@ -45,18 +50,175 @@ object EvmTrie {
     }
   }
 
-  sealed abstract class Node
-  sealed abstract class KeyedNode extends Node { val key: List[Nibble] }
+  case class Key(leaf: Boolean, nibbles: List[Nibble])
 
-  case object EmptyNode extends Node
+//  sealed trait NodeKey {
+//    def apply(nibbles: Iterator[Nibble]): Option[]
+//  }
 
-  case class LeafNode(key: Nibbles, value: B) extends KeyedNode
 
-  case class ExtensionNode(key: Nibbles, value: NodeEntry) extends KeyedNode {
-    require(key.size > 1, s"invalid extension node key size (size: ${key.size})")
-    // Note: value can not be an extension node
+  sealed abstract class Node {
+    def get(remainder: Iterator[Nibble])(implicit db: EvmTrieDb): Future[Option[B]]
+    def put(remainder: BufferedIterator[Nibble], value: B)(implicit db: EvmTrieDb): Future[Node]
   }
-  case class BranchNode(entries: List[NodeEntry], value: Option[B]) extends Node
+  object Node {
+    // Creates branch node for single nibble prefix or extension node for multi-nibble prefix
+    def fromPrefix(prefix: Nibbles, entry: NodeEntry): Node = {
+      if (prefix.tail.isEmpty) BranchNode.empty.updated(prefix.head, entry)
+      else ExtensionNode(prefix, entry)
+    }
+  }
+  sealed abstract class KeyedNode extends Node {
+    val key: Nibbles
+
+    def splitKey(prefix: BufferedIterator[Nibble]): (Nibbles, Nibbles) = key.span { nibble =>
+      if (prefix.hasNext && (prefix.head == nibble)) {
+        prefix.next()
+        true
+      } else false
+    }
+  }
+
+  case object EmptyNode extends Node {
+    override def get(remainder: Iterator[Nibble])(implicit db: EvmTrieDb) = Future.successful(None)
+  }
+
+  case class LeafNode(key: Nibbles, value: B) extends KeyedNode {
+    override def get(remainder: Iterator[Nibble])(implicit db: EvmTrieDb): Future[Option[B]] = {
+      if (key.forall(n => remainder.hasNext && (n == remainder.next())) && remainder.isEmpty)
+        Future.successful(Some(value))
+      else Future.successful(None)
+    }
+
+    override def put(remainder: BufferedIterator[Nibble], value: B)(implicit db: EvmTrieDb): Future[Node] = {
+
+      val (prefix, suffix) = splitKey(remainder)
+
+      if (suffix.isEmpty && remainder.isEmpty) {
+        // Full key match - replace this leaf node
+        Future.successful(copy(value = value))
+
+      } else if (prefix.isEmpty && remainder.isEmpty) {
+        // No match and incoming key (remainder) was empty - create terminator branch node with 1 leaf node
+        NodeEntry(copy(key = this.key.tail)).map(leaf => BranchNode(value).updated(this.key.head, leaf))
+
+      } else if (prefix.isEmpty) {
+        // No match and both keys are non-empty - create branch node with 2 leaf nodes
+        val head = remainder.next()
+        val tail = remainder.toList
+        BranchNode(key.head -> copy(key = key.tail), head -> LeafNode(tail, value))
+
+      } else if (remainder.isEmpty) {
+        // This leaf's key starts with incoming key (remainder)
+        // Note that suffix should be non-empty by this point due to previous conditions
+
+        for {
+          leaf <- NodeEntry(copy(key = suffix.tail))
+          term <- NodeEntry(BranchNode(value).updated(suffix.head, leaf))
+        } yield Node.fromPrefix(prefix, term)
+
+      } else if (suffix.isEmpty) {
+        // Incoming key (remainder) starts with this leaf's key
+        // Note that remainder should be non-empty by this point due to previous conditions
+        val head = remainder.next()
+        val tail = remainder.toList
+        for {
+          leaf <- NodeEntry(LeafNode(tail, value))
+          term <- NodeEntry(BranchNode(this.value).updated(head, leaf))
+        } yield Node.fromPrefix(prefix, term)
+
+      } else {
+        // This node's key and incoming key intersect (share a common, but not complete, prefix)
+        // Note that both suffix and remainder should be non-empty by this point due to previous conditions
+        val head = remainder.next()
+        val tail = remainder.toList
+        for {
+          branch <- BranchNode(suffix.head -> copy(key = suffix.tail), head -> LeafNode(tail, value))
+          entry <- NodeEntry(branch)
+        } yield Node.fromPrefix(prefix, entry)
+      }
+    }
+  }
+
+  case class ExtensionNode(key: Nibbles, entry: NodeEntry) extends KeyedNode {
+    require(key.size > 1, s"invalid extension node key size (size: ${key.size})")
+
+    override def get(remainder: Iterator[Nibble])(implicit db: EvmTrieDb): Future[Option[B]] = {
+      if (key.forall(n => remainder.hasNext && (n == remainder.next())) && remainder.hasNext)
+        entry.node.flatMap(_.get(remainder))
+      else Future.successful(None)
+    }
+
+    override def put(remainder: BufferedIterator[Nibble], value: B)(implicit db: EvmTrieDb): Future[Node] = {
+      val (prefix, suffix) = splitKey(remainder)
+
+      if (suffix.isEmpty) {
+        // Incoming key (remainder) either starts with or is equal to this node's key - defer to this node's entry
+        for {
+          node <- entry.node
+          updated <- node.put(remainder, value)
+          entry <- NodeEntry(updated)
+        } yield copy(entry = entry)
+
+      } else if (prefix.isEmpty && remainder.isEmpty) {
+        // Incoming key (remainder) is empty - create terminator branch node
+        for (entry <- NodeEntry(Node.fromPrefix(key.tail, this.entry)))
+          yield BranchNode(value).updated(key.head, entry)
+
+      } else if (prefix.isEmpty) {
+        // No match - create branch node
+        val head = remainder.next()
+        val tail = remainder.toList
+        // Create branch -> (extension, leaf) or branch -> (branch, leaf)
+        BranchNode(key.head -> Node.fromPrefix(key.tail, this.entry), head -> LeafNode(tail, value))
+
+      } else if (remainder.isEmpty) {
+        // This node's key either starts with or is equal to incoming key (remainder)
+        // (branch | extension) -> branch(value)(branch | extension)
+        for {
+          inner <- NodeEntry(Node.fromPrefix(suffix.tail, this.entry))
+          entry <- NodeEntry(BranchNode(value).updated(suffix.head, inner))
+        } yield Node.fromPrefix(prefix, entry)
+
+      } else {
+        // This node's key and incoming key intersect (share a common, but not complete, prefix)
+        // (branch | extension) -> branch(leaf, (leaf | branch | extension))
+        val head = remainder.next()
+        val tail = remainder.toList
+        for {
+          inner1 <- NodeEntry(Node.fromPrefix(suffix.tail, this.entry))
+        } yield blah
+
+      }
+
+    }
+  }
+
+  case class BranchNode(entries: List[NodeEntry], value: Option[B]) extends Node {
+    require(entries.size == 16, s"invalid entries size (size: ${entries.size})")
+
+    override def get(remainder: Iterator[Nibble])(implicit db: EvmTrieDb): Future[Option[B]] = {
+      if (remainder.hasNext) entries(remainder.next()).node.flatMap(_.get(remainder))
+      else Future.successful(value)
+    }
+    def updated(index: Nibble, entry: NodeEntry): BranchNode = copy(entries = entries.updated(index, entry))
+  }
+  object BranchNode {
+    val empty = BranchNode(List.fill(16)(NodeEntry.empty), None)
+
+    def apply(value: B): BranchNode = empty.copy(value = Some(value))
+
+    def apply(nodes: (Nibble, Node)*): Future[BranchNode] = {
+      nodes.foldLeft(Future.successful(Array.fill[NodeEntry](16)(NodeEntry.empty))) {
+        case (entries, (index, node)) =>
+          entries.flatMap(entries => NodeEntry(node).map { entry =>
+            entries(index) = entry
+            entries
+          })
+      }.map(entries => BranchNode(entries.toList, None))
+    }
+
+  }
 
 
   object codecs {
